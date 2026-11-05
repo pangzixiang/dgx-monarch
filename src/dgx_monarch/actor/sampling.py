@@ -446,6 +446,33 @@ def model_sampling_render_clone(model_patcher: Any, value: object | None) -> Any
     if model_sampling is None:
         return render_patcher
 
+    if model_sampling["kind"] == "minimax_h3_av":
+        # Mirror comfy_extras.nodes_minimax_h3.MiniMaxH3SigmaShift exactly: a
+        # FRESH ModelSamplingAV+CONST object (never mutate the shared stock
+        # object, so an unshifted render cannot inherit this shift), plus the
+        # transformer options the minimax_h3 adapter reads on every rank.
+        import comfy.model_sampling as comfy_model_sampling
+
+        class ModelSamplingAdvanced(
+            comfy_model_sampling.ModelSamplingAV, comfy_model_sampling.CONST
+        ):
+            pass
+
+        original = render_patcher.get_model_object("model_sampling")
+        advanced = ModelSamplingAdvanced(render_patcher.model.model_config)
+        advanced.set_parameters(
+            shift=model_sampling["shift_video"],
+            audio_shift=model_sampling["shift_audio"],
+        )
+        if hasattr(original, "noise_scale"):
+            advanced.set_noise_scale(original.noise_scale)
+        render_patcher.add_object_patch("model_sampling", advanced)
+        to = render_patcher.model_options.get("transformer_options", {}).copy()
+        to["minimax_h3_sigma_shift_video"] = model_sampling["shift_video"]
+        to["minimax_h3_sigma_shift_audio"] = model_sampling["shift_audio"]
+        render_patcher.model_options["transformer_options"] = to
+        return render_patcher
+
     from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 
     shifted, = ModelSamplingSD3().patch(render_patcher, model_sampling["shift"])

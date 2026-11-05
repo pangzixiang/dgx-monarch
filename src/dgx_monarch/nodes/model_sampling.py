@@ -27,3 +27,47 @@ class DGXMonarchModelSamplingSD3:
     def patch(self, model: ModelSpec, shift: float):
         refuse_shift_after_skip(model)
         return (model.with_model_sampling({"kind": "sd3", "shift": shift}),)
+
+
+class DGXMonarchModelSamplingMinimaxH3AV:
+    """Set the MiniMax H3 video/audio flow shifts coherently for a mesh render.
+
+    Mirrors the stock ``MiniMaxH3SigmaShift`` node for the remote DGXM_MODEL
+    handle: the driver keeps the spec on the ModelSpec, and the actor applies
+    it as a fresh ``ModelSamplingAV`` object patch plus the
+    ``minimax_h3_sigma_shift_video`` / ``minimax_h3_sigma_shift_audio``
+    transformer options.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": (MODEL_TYPE,),
+                "shift_video": (
+                    "FLOAT",
+                    {"default": 6.0, "min": 0.01, "max": 100.0, "step": 0.01},
+                ),
+                "shift_audio": (
+                    "FLOAT",
+                    {"default": 3.0, "min": 0.01, "max": 100.0, "step": 0.01},
+                ),
+            },
+        }
+
+    RETURN_TYPES = (MODEL_TYPE,)
+    RETURN_NAMES = ("model",)
+    FUNCTION = "patch"
+    CATEGORY = NODE_CATEGORY
+
+    def patch(self, model: ModelSpec, shift_video: float, shift_audio: float):
+        refuse_shift_after_skip(model)
+        return (
+            model.with_model_sampling(
+                {
+                    "kind": "minimax_h3_av",
+                    "shift_video": shift_video,
+                    "shift_audio": shift_audio,
+                }
+            ),
+        )
