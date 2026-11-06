@@ -797,6 +797,12 @@
     {
       "site": "adapters/sol_attention.py::_assert_waived::UnsupportedModelError#0",
       "class": "K",
+      "guard": "sol_attn:ltx",
+      "waivable": true
+    },
+    {
+      "site": "adapters/sol_attention.py::_assert_waived::UnsupportedModelError#1",
+      "class": "K",
       "guard": "sol_attn:minimax_h3",
       "waivable": true
     },

@@ -23,6 +23,19 @@ from .base import UnsupportedModelError
 SOL_HEAD_DIM: Final = 128
 SOL_DTYPE: Final = torch.bfloat16
 
+# Per family, the head dimension its geometry admits. H3 ships 24 decoder
+# layers and 128-wide heads; LTX ships 64-wide heads, which the official Sana
+# stage-2 policy runs through the same Triton reference backend.
+SOL_FAMILY_HEAD_DIMS: Final = {
+    "minimax_h3": 128,
+    "ltx": 64,
+}
+
+
+def sol_head_dim_for(family: str) -> int:
+    """The admitted head dimension for a family, defaulting to the H3 value."""
+    return int(SOL_FAMILY_HEAD_DIMS.get(family, SOL_HEAD_DIM))
+
 # The exact install, both packages. apache-tvm-ffi is a runtime dependency of
 # the CuTe path that the package's own requirements do not pull in.
 SOL_INSTALL_SPEC: Final = (
@@ -104,19 +117,22 @@ class CallPreflight:
         return int(expected)
 
 
-def validate_bthd(q, k, v, expected_local_heads: int) -> None:
+def validate_bthd(q, k, v, expected_local_heads: int, head_dim: int) -> None:
     """Own the axis meaning the kernel accepts without checking.
 
     Shape equality across q, k and v is two checks at once: no grouped-query
     attention (the head counts agree) and no attention between streams of
     different length. It does not prove self-attention; an equal-length cross
-    attention would pass.
+    attention would pass. ``head_dim`` is the family's admitted head dimension
+    (SOL_FAMILY_HEAD_DIMS), so an LTX call is checked against 64, not the H3
+    128.
     """
     for name, tensor in (("query", q), ("key", k), ("value", v)):
         if not isinstance(tensor, torch.Tensor) or tensor.ndim != 4:
             raise UnsupportedModelError(refusal(
                 RefusalClass.PHYSICS,
-                f"sol-attn needs a 4D {name} tensor shaped (B, T, H, 128). "
+                f"sol-attn needs a 4D {name} tensor shaped "
+                f"(B, T, H, {head_dim}). "
                 "Use a SAGE_* kernel or TORCH_FLASH instead.",
             ))
     if q.shape != k.shape or q.shape != v.shape:
@@ -127,12 +143,12 @@ def validate_bthd(q, k, v, expected_local_heads: int) -> None:
             f"k {list(k.shape)}, v {list(v.shape)}. Use a SAGE_* kernel or "
             "TORCH_FLASH instead.",
         ))
-    if q.shape[-1] != SOL_HEAD_DIM:
+    if q.shape[-1] != head_dim:
         raise UnsupportedModelError(refusal(
             RefusalClass.PHYSICS,
-            f"sol-attn is built for head dimension {SOL_HEAD_DIM} and this "
-            f"render carries {q.shape[-1]}. Use a SAGE_* kernel or TORCH_FLASH "
-            "instead.",
+            f"sol-attn is built for head dimension {head_dim} for this family "
+            f"and the render carries {q.shape[-1]}. Use a SAGE_* kernel or "
+            "TORCH_FLASH instead.",
         ))
     if q.shape[2] != expected_local_heads:
         raise UnsupportedModelError(refusal(

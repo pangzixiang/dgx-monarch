@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import pathlib
+import sys
 import types
 
 import pytest
@@ -18,6 +19,7 @@ import torch
 
 from dgx_monarch import accuracy_waiver
 from dgx_monarch import topology as topology_mod
+from dgx_monarch.actor import attention_dispatch as _actor_dispatch
 from dgx_monarch.adapters import sol_attention as sol
 from dgx_monarch.adapters import sol_attention_guards as guards
 from dgx_monarch.adapters.base import UnsupportedModelError
@@ -26,6 +28,14 @@ from dgx_monarch.refusal import GUARDS, RefusalClass
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "dgx_monarch"
 KIND = "waive-known-wrong:sol-attn"
+
+# The real sol-attn interface, imported at collection time when installed. The
+# dispatch-entry tests import it at runtime otherwise; leaving its dependency
+# closure (aiohttp/yarl/...) in sys.modules is what the conftest guard reports.
+try:
+    import sol_attn.interface as _sol_interface  # noqa: F401
+except Exception:  # absent is the documented skip of those tests
+    _sol_interface = None
 
 
 def _bthd(rows=8, heads=2, dim=128, dtype=torch.bfloat16):
@@ -54,7 +64,7 @@ def test_an_unshipped_tau_refuses_instead_of_rounding_to_a_shipped_one(name):
 def test_every_shipped_tau_parses_to_its_own_value():
     """Each name is a distinct measured setting the ledger can bind to."""
     assert [sol.parse_sol_tau(n) for n in sol.SOL_SELECTABLE_KERNELS] == [
-        0.6, 0.7, 1.0]
+        0.6, 0.7, 1.0, 1.25, 1.5]
 
 
 def test_the_validated_tau_set_ships_empty_and_grants_nothing():
@@ -87,7 +97,8 @@ def test_the_widget_ships_exactly_the_selectable_sol_values():
 
     shipped = [name for name in _ATTENTION_KERNELS if sol.is_sol_kernel(name)]
     assert shipped == list(sol.SOL_SELECTABLE_KERNELS) == [
-        "SOL_ATTN_TAU0.6", "SOL_ATTN_TAU0.7", "SOL_ATTN_TAU1.0"]
+        "SOL_ATTN_TAU0.6", "SOL_ATTN_TAU0.7", "SOL_ATTN_TAU1.0",
+        "SOL_ATTN_TAU1.25", "SOL_ATTN_TAU1.5"]
     assert _ATTENTION_KERNELS[0] == "TORCH_FLASH"  # the default is untouched
 
 
@@ -118,13 +129,15 @@ def test_every_resolution_site_goes_through_the_shared_helper():
 
 # The family scope, bound where the worker injects attention.
 
-def test_h3_is_the_only_family_in_scope():
-    assert set(sol.SOL_ATTN_FAMILIES) == {"minimax_h3"}
+def test_the_admitted_families_are_h3_and_ltx():
+    """H3 was measured on real activations; LTX rides the official stage-2
+    policy under its own class-K guard. Nothing else is admitted."""
+    assert set(sol.SOL_ATTN_FAMILIES) == {"minimax_h3", "ltx"}
     sol.assert_family_supported("minimax_h3")
+    sol.assert_family_supported("ltx")
 
 
 @pytest.mark.parametrize("family,fragment", [
-    ("ltx", "0.058"),
     ("krea2", "grouped-query"),
     ("wan", "no render ceremony"),
 ])
@@ -170,7 +183,7 @@ def _dispatch_with(monkeypatch, kernel, built=None):
     construction is faked; the dispatcher is the shipped one.
     """
     from dgx_monarch import adapters
-    from dgx_monarch.actor import attention_dispatch as dispatch_mod
+    dispatch_mod = _actor_dispatch
 
     def fake_sol(kernel_name, sync, *, ulysses, ring, scope=None):
         def implementation(*_a, **_k):
@@ -268,7 +281,7 @@ def test_the_first_call_refuses_a_family_outside_the_lever():
 
 def test_the_wan_view_forwards_the_scope_to_its_dispatcher(monkeypatch):
     """Wan adapters hand back a view; a bind through it must still land."""
-    from dgx_monarch.actor import attention_dispatch as dispatch_mod
+    dispatch_mod = _actor_dispatch
 
     dispatch = _dispatch_with(monkeypatch, "SOL_ATTN_TAU1.0")
     view = dispatch_mod._WanAttentionView(dispatch, ("key",))
@@ -286,7 +299,8 @@ def test_a_transposed_tensor_is_refused_rather_than_silently_computed():
     assert preflight.expected_local_heads() == 2
     bhtd = torch.zeros(1, 2, 8, 128, dtype=torch.bfloat16)  # heads on axis 1
     with pytest.raises(UnsupportedModelError) as excinfo:
-        guards.validate_bthd(bhtd, bhtd, bhtd, preflight.expected_local_heads())
+        guards.validate_bthd(bhtd, bhtd, bhtd, preflight.expected_local_heads(),
+                             128)
     assert "wrong output that looks valid" in str(excinfo.value)
 
 
@@ -322,13 +336,13 @@ def test_the_outer_surface_refuses_what_the_kernel_cannot_express(kwargs, fragme
 ])
 def test_the_kernel_constraints_are_refused_not_worked_around(tensors, fragment):
     with pytest.raises(UnsupportedModelError) as excinfo:
-        guards.validate_bthd(*tensors, 2)
+        guards.validate_bthd(*tensors, 2, 128)
     assert fragment in str(excinfo.value)
 
 
 def test_a_cpu_tensor_refuses():
     with pytest.raises(UnsupportedModelError) as excinfo:
-        guards.validate_bthd(_bthd(), _bthd(), _bthd(), 2)
+        guards.validate_bthd(_bthd(), _bthd(), _bthd(), 2, 128)
     assert "CUDA tensors" in str(excinfo.value)
 
 
@@ -699,6 +713,56 @@ def test_the_family_scoped_guard_belongs_to_the_kind():
     assert accuracy_waiver.KNOWN_WRONG_GUARDS[guard] == KIND
 
 
+# LTX: admitted for the official Sana stage-2 policy, under its own guard.
+
+def test_ltx_is_admitted_under_its_own_guard_not_the_h3_one():
+    guard = sol.SOL_ATTN_LTX_GUARD
+    assert guard != sol.SOL_ATTN_H3_GUARD
+    assert sol.SOL_WAIVER_GUARDS["ltx"] == guard
+    assert GUARDS[guard].refusal_class is RefusalClass.KNOWN_WRONG
+    assert GUARDS[guard].consent_kind == KIND
+    assert GUARDS[guard].waivable_now is True
+    assert check_guard(KIND, guard) == guard
+
+
+def test_ltx_has_no_vouched_tau_so_every_render_owes_the_waiver():
+    """LTX deliberately ships no entry in SOL_VALIDATED_TAUS: the official
+    per-step schedule runs under the class-K waiver route on every render."""
+    assert "ltx" not in sol.SOL_VALIDATED_TAUS
+    assert not sol.tau_is_vouched("ltx", 1.0)
+    assert sol.sol_waiver_required("ltx", 1.0)
+
+
+def test_the_ltx_step_schedule_is_the_official_three_update_policy():
+    assert sol.SOL_ATTN_STEP_TAUS["ltx"] == (1.0, 1.25, 1.5)
+    assert sol.sol_step_tau_for("ltx", (0, 3)) == 1.0
+    assert sol.sol_step_tau_for("ltx", (1, 3)) == 1.25
+    assert sol.sol_step_tau_for("ltx", (2, 3)) == 1.5
+    assert sol.sol_step_tau_for("ltx", (5, 3)) == 1.5  # clamped at the tail
+    assert sol.sol_step_tau_for("ltx", None) is None   # never guess a step
+    assert sol.sol_step_tau_for("minimax_h3", (0, 3)) is None  # no schedule
+
+
+def test_the_dense_policy_is_per_family():
+    assert sol.sol_dense_blocks_for("minimax_h3") == 2
+    assert sol.sol_dense_blocks_for("ltx") == 1
+    assert sol.SOL_DENSE_FIRST_FRACS["ltx"] == 0.0
+    # LTX keeps no step dense, whatever the position says.
+    assert sol.sol_dense_step((0, 20), 0.5, family="ltx") is False
+    # H3 keeps the GB10 recipe, and the familyless default stays H3.
+    assert sol.sol_dense_step((0, 20), 0.5, family="minimax_h3") is True
+    assert sol.sol_dense_step((0, 20), 0.5) is True
+
+
+def test_ltx_admits_a_64_wide_head_and_the_waiver_names_its_own_guard(monkeypatch):
+    assert guards.sol_head_dim_for("ltx") == 64
+    assert guards.sol_head_dim_for("minimax_h3") == 128
+    monkeypatch.setattr(accuracy_waiver, "waived", lambda _guard: False)
+    with pytest.raises(UnsupportedModelError) as excinfo:
+        sol._assert_waived("ltx")
+    assert "[dgxm:K guard=sol_attn:ltx waivable=1]" in str(excinfo.value)
+
+
 def test_a_render_without_a_grant_refuses_and_offers_the_card(monkeypatch):
     monkeypatch.setattr(accuracy_waiver, "waived", lambda _guard: False)
     with pytest.raises(UnsupportedModelError) as excinfo:
@@ -730,7 +794,7 @@ def test_the_waiver_is_checked_on_every_call_not_once_per_build():
 
 def test_an_unvouched_tau_takes_the_waiver_route_and_never_downgrades():
     text = (SRC / "adapters/sol_attention.py").read_text()
-    assert "return not tau_is_vouched" in text
+    assert "not tau_is_vouched" in text
     for fallback in ("SAGE_AUTO\"", "TORCH_FLASH\"", "make_usp_attention("):
         assert fallback not in text, "the lever must refuse, never substitute"
 
@@ -756,9 +820,7 @@ def test_configure_never_swallows_a_typed_sol_refusal(monkeypatch):
     its capability context with the kernel it asked for, so keeping flash under
     a sol name would render one kernel's math under another kernel's vouch.
     """
-    from dgx_monarch.actor import attention_dispatch as dispatch_mod
-
-    dispatch = dispatch_mod._AttentionDispatch()
+    dispatch = _actor_dispatch._AttentionDispatch()
     topology = {"ulysses": 2, "ring": 1, "cfg": 1, "dp": 1}
     monkeypatch.setattr("dgx_monarch.adapters.make_usp_attention",
                         lambda *_a, **_k: object())

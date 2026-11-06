@@ -11572,7 +11572,9 @@
         "SAGE_FP16",
         "SOL_ATTN_TAU0.6",
         "SOL_ATTN_TAU0.7",
-        "SOL_ATTN_TAU1.0"
+        "SOL_ATTN_TAU1.0",
+        "SOL_ATTN_TAU1.25",
+        "SOL_ATTN_TAU1.5"
       ],
       "datatype": "COMBO",
       "default": "TORCH_FLASH",

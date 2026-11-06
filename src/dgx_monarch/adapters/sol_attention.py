@@ -38,23 +38,27 @@ log = get_logger(__name__)
 # The kernel name carries its own tau. Parsing lives here and nowhere else.
 SOL_KERNEL_PREFIX: Final = "SOL_ATTN_TAU"
 # Every widget value this build ships; each tau is its own measured setting.
-SOL_SELECTABLE_KERNELS: Final = ("SOL_ATTN_TAU0.6", "SOL_ATTN_TAU0.7", "SOL_ATTN_TAU1.0")
+# TAU1.25 and TAU1.5 exist for the LTX family's official per-step schedule.
+SOL_SELECTABLE_KERNELS: Final = (
+    "SOL_ATTN_TAU0.6", "SOL_ATTN_TAU0.7", "SOL_ATTN_TAU1.0",
+    "SOL_ATTN_TAU1.25", "SOL_ATTN_TAU1.5",
+)
 
 # Pinned explicitly: the installed default and the published docs disagree.
 SOL_THRESH_TYPE: Final = "diag"
 # 2 and 4 are SM90 only; GB10 takes 1.
 SOL_KV_SPLITS: Final = 1
 
-# Families whose geometry and evidence admit this kernel: only H3, the one
-# family measured under this kernel on real activations. Growing this set means
-# a guard, a ceremony and its own evidence.
-SOL_ATTN_FAMILIES: Final = frozenset({"minimax_h3"})
+# Families whose geometry and evidence admit this kernel. H3 is the one family
+# measured under this kernel on real activations. LTX is admitted for the
+# official Sana Sol-H3-Spark stage-2 policy (per-step taus 1.0/1.25/1.5, layer
+# 0 dense, no sink): its own class-K guard below, never the H3 guard. No
+# ceremony has measured sol on LTX activations on this hardware, so every LTX
+# render under sol takes the waiver route.
+SOL_ATTN_FAMILIES: Final = frozenset({"minimax_h3", "ltx"})
 
 # Why each excluded family is excluded, in one sentence, for the refusal text.
 SOL_FAMILY_REASONS: Final = MappingProxyType({
-    "ltx": ("its uly2 and ring2 image-conditioning legs measured 0.058 to 0.099 "
-            "one-step video NRMS against a 0.10 floor on 2026-08-12, so sequence "
-            "parallelism has already spent the fidelity budget a sparse kernel would need."),
     "krea2": ("it uses grouped-query attention, 48 query heads over 12 KV "
               "heads, and this kernel takes one head count for q, k and v, so "
               "reaching it means expanding K and V, the memory traffic this "
@@ -67,7 +71,8 @@ SOL_FAMILY_DEFAULT_REASON: Final = (
 )
 
 # Per family, the taus a render ceremony has admitted. With no entry for a
-# family, every selection takes the class-K waiver route.
+# family, every selection takes the class-K waiver route. LTX deliberately has
+# no entry: its official per-step schedule runs under the waiver route.
 SOL_VALIDATED_TAUS: Mapping[str, tuple[float, ...]] = MappingProxyType({})
 
 # Per family, the class-K guard whose waiver a render under this kernel needs.
@@ -78,8 +83,19 @@ SOL_VALIDATED_TAUS: Mapping[str, tuple[float, ...]] = MappingProxyType({})
 # so a second family means a second constant and a second raise site, as the
 # two ring-pad guards do.
 SOL_ATTN_H3_GUARD = "sol_attn:minimax_h3"
+SOL_ATTN_LTX_GUARD = "sol_attn:ltx"
 SOL_WAIVER_GUARDS: Mapping[str, str] = MappingProxyType({
     "minimax_h3": SOL_ATTN_H3_GUARD,
+    "ltx": SOL_ATTN_LTX_GUARD,
+})
+
+# Per family, the per-step tau schedule applied during a render, indexed by the
+# denoise step and clamped at the tail. Only LTX has one: the official Sana
+# Sol-H3-Spark stage-2 policy advances the tau each step (1.0, 1.25, 1.5 over
+# the recipe's 3 updates), and its layer-1 arrival steps the schedule forward.
+# A family without an entry uses the kernel's construction tau on every step.
+SOL_ATTN_STEP_TAUS: Mapping[str, tuple[float, ...]] = MappingProxyType({
+    "ltx": (1.0, 1.25, 1.5),
 })
 
 # NVIDIA's GB10 recipe for H3, as configuration rather than a widget: their
@@ -90,25 +106,60 @@ SOL_WAIVER_GUARDS: Mapping[str, str] = MappingProxyType({
 SOL_DENSE_FIRST_FRAC: Final = 0.2
 SOL_DENSE_BLOCKS: Final = 2
 
+# Per family, the step-level dense fraction and the leading dense blocks. LTX
+# takes the official Sana stage-2 policy: no step stays dense, and layer 0
+# stays dense on every step. H3 keeps the GB10 recipe above.
+SOL_DENSE_FIRST_FRACS: Mapping[str, float] = MappingProxyType({
+    "minimax_h3": SOL_DENSE_FIRST_FRAC,
+    "ltx": 0.0,
+})
+SOL_DENSE_BLOCKS_FAMILY: Mapping[str, int] = MappingProxyType({
+    "minimax_h3": SOL_DENSE_BLOCKS,
+    "ltx": 1,
+})
 
-def sol_dense_step(position: tuple[int, int] | None, t_v: float) -> bool:
-    """Return whether the current step uses dense attention under the GB10 recipe.
 
-    Keep the first ``ceil(SOL_DENSE_FIRST_FRAC * total)`` steps dense.
-    ``position`` supplies the index and total from the sampler's sigma table.
-    If that table is unreadable, use the timestep label and warn once: H3's
-    shifted sigma schedule can keep substantially more steps dense this way.
+def sol_dense_blocks_for(family: str) -> int:
+    """The leading dense transformer blocks for a family, zero when unknown."""
+    return int(SOL_DENSE_BLOCKS_FAMILY.get(family, 0))
+
+
+def sol_step_tau_for(family: str, position: tuple[int, int] | None) -> float | None:
+    """The step tau for a family at a sampler position.
+
+    None when the family has no per-step schedule (the kernel's construction
+    tau applies) or the position is unreadable (never guess a step).
     """
+    schedule = SOL_ATTN_STEP_TAUS.get(family)
+    if not schedule or position is None:
+        return None
+    index, _total = position
+    return float(schedule[min(index, len(schedule) - 1)])
+
+
+def sol_dense_step(position: tuple[int, int] | None, t_v: float,
+                   family: str | None = None) -> bool:
+    """Return whether the current step uses dense attention under the recipe.
+
+    Keep the first ``ceil(frac * total)`` steps dense for the family's fraction
+    (GB10 H3: 0.2; LTX official: none). ``position`` supplies the index and
+    total from the sampler's sigma table. If that table is unreadable, use the
+    timestep label and warn once: H3's shifted sigma schedule can keep
+    substantially more steps dense this way.
+    """
+    frac = float(SOL_DENSE_FIRST_FRACS.get(family or "", SOL_DENSE_FIRST_FRAC))
+    if frac <= 0:
+        return False
     if position is not None:
         index, total = position
-        return index < math.ceil(SOL_DENSE_FIRST_FRAC * total)
+        return index < math.ceil(frac * total)
     if not _warned_step_fallback:
         _warned_step_fallback.add("warned")
         log.warning(
             "sol-attn dense schedule: no sampler sigma table is readable, "
             "falling back to the timestep threshold; under a shifted sigma "
             "curve this runs more steps dense than the recipe intends")
-    return t_v < SOL_DENSE_FIRST_FRAC
+    return t_v < frac
 
 
 # Warn once per worker process; a Recycle respawns actors, so the next warns.
@@ -152,14 +203,20 @@ def assert_family_supported(family: str) -> None:
 
 
 def sol_waiver_required(family: str | None, tau: float) -> bool:
-    """Refuse an unbound or unscoped family, else say whether a waiver is owed."""
+    """Refuse an unbound or unscoped family, else say whether a waiver is owed.
+
+    A family with a per-step schedule (SOL_ATTN_STEP_TAUS) owes a waiver when
+    any tau in the schedule is unvouched, since the render may run all of them.
+    """
     if family is None:
         guards.refuse_geometry(
             "the render reached the kernel without binding a model family, "
             "so neither the family scope nor its accuracy waiver could be "
             "checked.")
     assert_family_supported(family)
-    return not tau_is_vouched(family, tau)
+    schedule = SOL_ATTN_STEP_TAUS.get(family)
+    taus = schedule if schedule else (tau,)
+    return any(not tau_is_vouched(family, t) for t in taus)
 
 
 # Why an identity ceremony is not run under this kernel, in the one sentence the
@@ -228,12 +285,13 @@ def bind_sol_scope(implementation, family: str) -> None:
 
 
 class _CallScope(threading.local):
-    """The sink prefix and dense schedule for the forward on this thread."""
+    """The sink prefix, dense schedule, and step tau for this thread's forward."""
 
     def __init__(self) -> None:
         self.active = False
         self.sink_tokens: int | None = 0
         self.dense = False
+        self.step_tau: float | None = None
 
 
 _SCOPE = _CallScope()
@@ -253,6 +311,23 @@ def sol_dense_scope(dense: bool) -> Iterator[None]:
         yield
     finally:
         _SCOPE.dense = previous
+
+
+@contextmanager
+def sol_step_tau_scope(tau: float | None) -> Iterator[None]:
+    """Run the enclosed attention calls at a fixed step tau.
+
+    The adapter decides, since only it knows the denoise step: a family with a
+    per-step schedule (SOL_ATTN_STEP_TAUS) wraps its block loop this way. The
+    kernel's construction tau applies wherever the scope is not set, so a
+    family without a schedule never changes behavior.
+    """
+    previous = _SCOPE.step_tau
+    _SCOPE.step_tau = tau
+    try:
+        yield
+    finally:
+        _SCOPE.step_tau = previous
 
 
 @contextmanager
@@ -303,26 +378,48 @@ class _Sentinel:
     __slots__ = ()
 
 
+SOL_APPROXIMATE_REFUSAL_TEXT = (
+    "the sol-attn kernel is approximate by construction and is NOT "
+    "identity preserving: it re-weights which key blocks are computed "
+    "exactly, which moves the sampling trajectory. Measured on this "
+    "hardware, a render under it is coherent and sharp but a different "
+    "composition from the same seed under exact attention (2026-08-15). "
+    "No tau has passed a render ceremony, so this is known-wrong math and "
+    "refuses by default. Render it under an accuracy waiver, which stamps "
+    "the output, or pick a SAGE_* kernel or TORCH_FLASH for exact framing."
+)
+
+
 def _assert_waived(family: str) -> None:
     """Refuse a render under known-wrong math without a stamped waiver.
 
     Checked on every call so grants and revocations apply per render, and
     ``waived`` fires its ledger record once per dispatch rather than once per
     block. The lever is class K because the kernel is not identity preserving:
-    the output is a different composition, not a slightly noisier one.
+    the output is a different composition, not a slightly noisier one. The
+    family selects its own guard, so an LTX waiver never rides on the H3 guard
+    and vice versa; a family without a guard is a bug, not a waiverable state.
     """
-    if accuracy_waiver.waived(SOL_WAIVER_GUARDS[family]):
+    guard = SOL_WAIVER_GUARDS.get(family)
+    if guard is None:
+        raise RuntimeError(
+            f"family {family!r} reached the sol waiver check without a guard")
+    if accuracy_waiver.waived(guard):
         return
+    # Each arm binds its family's guard to a module constant so the refusal
+    # walker can resolve it; a dict lookup would leave both guards unclaimed.
+    if family == "ltx":
+        raise UnsupportedModelError(refusal(
+            RefusalClass.KNOWN_WRONG,
+            SOL_APPROXIMATE_REFUSAL_TEXT,
+            guard=SOL_ATTN_LTX_GUARD,
+            waivable=True,
+            panel_action=accuracy_waiver.panel_action(SOL_ATTN_LTX_GUARD),
+            troubleshooting=84,
+        ) + accuracy_waiver.card_tail(SOL_ATTN_LTX_GUARD, family_hint=family))
     raise UnsupportedModelError(refusal(
         RefusalClass.KNOWN_WRONG,
-        "the sol-attn kernel is approximate by construction and is NOT "
-        "identity preserving: it re-weights which key blocks are computed "
-        "exactly, which moves the sampling trajectory. Measured on this "
-        "hardware, a render under it is coherent and sharp but a different "
-        "composition from the same seed under exact attention (2026-08-15). "
-        "No tau has passed a render ceremony, so this is known-wrong math and "
-        "refuses by default. Render it under an accuracy waiver, which stamps "
-        "the output, or pick a SAGE_* kernel or TORCH_FLASH for exact framing.",
+        SOL_APPROXIMATE_REFUSAL_TEXT,
         guard=SOL_ATTN_H3_GUARD,
         waivable=True,
         panel_action=accuracy_waiver.panel_action(SOL_ATTN_H3_GUARD),
@@ -361,16 +458,19 @@ def make_sol_usp_attention(kernel: str, sync_ulysses: bool, *,
         """The kernel call itself, or its exact stand-in on a dense step."""
         if _waiver_required():  # backstop; the outer guard refuses first
             _assert_waived(str(scope.family))
-        guards.validate_bthd(q, k, v, preflight.expected_local_heads())
+        family = str(scope.family)
+        guards.validate_bthd(q, k, v, preflight.expected_local_heads(),
+                             guards.sol_head_dim_for(family))
         sink_tokens = _current_sink(int(q.shape[1]))
         if _SCOPE.dense:
             qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))
             out = torch.nn.functional.scaled_dot_product_attention(
                 qh, kh, vh, scale=softmax_scale)
             return out.transpose(1, 2).contiguous()
+        step_tau = _SCOPE.step_tau if _SCOPE.step_tau is not None else tau
         return sol_attn(
             q.contiguous(), k.contiguous(), v.contiguous(),
-            scale=softmax_scale, tau=tau, thresh_type=SOL_THRESH_TYPE,
+            scale=softmax_scale, tau=step_tau, thresh_type=SOL_THRESH_TYPE,
             kv_splits=SOL_KV_SPLITS, sink_tokens=sink_tokens, sink_start=0)
 
     class _SolProcessor:

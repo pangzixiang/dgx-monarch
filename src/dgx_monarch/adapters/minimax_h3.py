@@ -441,7 +441,8 @@ class MiniMaxH3Adapter(Adapter):
             video_start = next(
                 (a for a, _, kind in layout.segments if kind == "video"), None)
             dense_step = sol_dense_step(
-                _sampler_step_position(transformer_options), t_v)
+                _sampler_step_position(transformer_options), t_v,
+                family="minimax_h3")
             with sol_sink_scope(video_start):
                 prefetch_queue = comfy.model_prefetch.make_prefetch_queue(
                     list(self.blocks), device, transformer_options)

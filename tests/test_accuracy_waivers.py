@@ -531,10 +531,13 @@ def test_the_waiver_topology_label_is_the_operators_own_preset_spelling():
     assert accuracy_waiver.topology_label({"ring": "junk"}) == "single"
 
 
+LTX_SOL_ATTN = "sol_attn:ltx"
+
+
 def test_the_live_class_k_guards_are_wired_and_agree_with_the_registry():
     assert set(accuracy_waiver.KNOWN_WRONG_GUARDS) == {
-        RING_PAD, H3_RING_PAD, SOL_ATTN, H3_SOL_ATTN, PIN_SOL_ATTN, SHARD_QUANT,
-        CHROMA_SHARD_QUANT}
+        RING_PAD, H3_RING_PAD, SOL_ATTN, H3_SOL_ATTN, LTX_SOL_ATTN, PIN_SOL_ATTN,
+        SHARD_QUANT, CHROMA_SHARD_QUANT}
     for guard, kind in accuracy_waiver.KNOWN_WRONG_GUARDS.items():
         spec = GUARDS[guard]
         assert spec.refusal_class is RefusalClass.KNOWN_WRONG

@@ -162,6 +162,14 @@ GUARDS: Final[dict[str, GuardSpec]] = {
         "the sol-attn sparse kernel is not identity preserving; the waiver is "
         "wired and every render under it is stamped",
     ),
+    "sol_attn:ltx": GuardSpec(
+        RefusalClass.KNOWN_WRONG,
+        True,
+        "waive-known-wrong:sol-attn",
+        "the sol-attn sparse kernel is not identity preserving; LTX is admitted "
+        "for the official Sana stage-2 per-step schedule and every LTX render "
+        "under it is stamped with this family-scoped waiver",
+    ),
     "sol_attn:checkpoint_pin": GuardSpec(
         RefusalClass.KNOWN_WRONG,
         True,

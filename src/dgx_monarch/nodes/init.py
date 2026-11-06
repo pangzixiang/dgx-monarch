@@ -12,7 +12,7 @@ from ..topology import PRESETS, topology_from_preset
 from .common import MeshSpec
 
 # Widget vocabulary, read-only after import.
-_ATTENTION_KERNELS = ["TORCH_FLASH", "TORCH_CUDNN", "TORCH_EFFICIENT", "FA", "FA3", "SAGE_AUTO", "SAGE_FP8", "SAGE_FP16", "SOL_ATTN_TAU0.6", "SOL_ATTN_TAU0.7", "SOL_ATTN_TAU1.0"]
+_ATTENTION_KERNELS = ["TORCH_FLASH", "TORCH_CUDNN", "TORCH_EFFICIENT", "FA", "FA3", "SAGE_AUTO", "SAGE_FP8", "SAGE_FP16", "SOL_ATTN_TAU0.6", "SOL_ATTN_TAU0.7", "SOL_ATTN_TAU1.0", "SOL_ATTN_TAU1.25", "SOL_ATTN_TAU1.5"]
 # Derive selectable families from the adapter registry. Read-only after import.
 _FAMILY_CHOICES = [family_select.AUTO, *SELECTABLE_FAMILIES]
 

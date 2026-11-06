@@ -60,6 +60,7 @@ from .base import (
     sp_gather,
 )
 from .stock_attention import bind_stock_attention, stock_attention_options
+from . import sol_attention
 
 log = get_logger(__name__)
 
@@ -67,6 +68,45 @@ log = get_logger(__name__)
 # transformer_options to every attention in a block (BasicAVTransformerBlock.forward).
 _PAD_ROWS_KEY = "_dgxm_ltx_pad_rows"
 VIDEO, AUDIO = "video", "audio"
+
+
+def _ltx_step_tau(transformer_options) -> float | None:
+    """The per-step tau for the official stage-2 policy, or None when the
+    kernel's construction tau applies.
+
+    Read from the sampler's own sigma table (mirrors the H3 reader): None for
+    an unreadable table, which never guesses a step. The LTX family schedule
+    lives in sol_attention.SOL_ATTN_STEP_TAUS.
+    """
+    options = transformer_options or {}
+    current = options.get("sigmas")
+    table = options.get("sample_sigmas")
+    if current is None or table is None or len(table) < 2:
+        return None
+    where = torch.where(table == current.flatten()[0].to(table.device))[0]
+    if len(where) == 0:
+        return None
+    return sol_attention.sol_step_tau_for(
+        "ltx", (int(where[0]), len(table) - 1))
+
+
+def _dense_attention(inner, dense: bool):
+    """Run a bound attention under the sol dense scope when ``dense`` is set.
+
+    The official LTX stage-2 policy keeps layer 0 dense on every step; the
+    block loop lives inside comfy's stock method, so the dense flag rides the
+    bound attention of the leading blocks instead of a wrapper scope. One
+    factory, one returned local function, so the surface contract can resolve
+    the bind site's replacement to a real definition.
+    """
+
+    def dense_forward(*args, **kwargs):
+        if not dense:
+            return inner(*args, **kwargs)
+        with sol_attention.sol_dense_scope(True):
+            return inner(*args, **kwargs)
+
+    return dense_forward
 
 # The two comfy.model_base classes this adapter binds, matched exactly: an
 # unvetted LTXV/LTXAV subclass raises typed instead of binding.
@@ -290,16 +330,20 @@ class LTXAdapter(Adapter):
             if timestep is not None and torch.is_tensor(timestep) and timestep.ndim == 3 and timestep.shape[1] > 1:
                 timestep, _ = shard_seq(timestep, dim=1)
 
-            x = stock_process_blocks(
-                self, x, context, attention_mask, timestep, pe,
-                transformer_options=stock_attention_options(
-                    {**transformer_options, _PAD_ROWS_KEY: pad_rows}),
-                self_attention_mask=guide_bias, **kwargs,
-            )
+            step_tau = _ltx_step_tau(transformer_options)
+            with sol_attention.sol_step_tau_scope(step_tau):
+                x = stock_process_blocks(
+                    self, x, context, attention_mask, timestep, pe,
+                    transformer_options=stock_attention_options(
+                        {**transformer_options, _PAD_ROWS_KEY: pad_rows}),
+                    self_attention_mask=guide_bias, **kwargs,
+                )
             return sp_gather(x, orig_len, dim=1)
 
-        for block in diffusion_model.transformer_blocks:
-            self.bind(block.attn1, "forward", usp_self)
+        dense_blocks = sol_attention.sol_dense_blocks_for(self.family)
+        for index, block in enumerate(diffusion_model.transformer_blocks):
+            bound = _dense_attention(usp_self, index < dense_blocks)
+            self.bind(block.attn1, "forward", bound)
         self.bind(diffusion_model, "_process_transformer_blocks", usp_process_blocks)
         log.info("ltxv USP injected: %d blocks, sp=%d",
                  len(diffusion_model.transformer_blocks), ctx.topology_sp)
@@ -385,26 +429,33 @@ class LTXAdapter(Adapter):
                 ]
             timestep = [v_ts, a_ts, cross_ts, timestep[3], timestep[4]]
 
-            out = stock_process_blocks(
-                self, [vx, ax], context, attention_mask, timestep,
-                [(v_pe, av_cross_v), (a_pe, av_cross_a)],
-                transformer_options=stock_attention_options(
-                    {**transformer_options, _PAD_ROWS_KEY: pad_rows}),
-                self_attention_mask=guide_bias, **kwargs,
-            )
+            step_tau = _ltx_step_tau(transformer_options)
+            with sol_attention.sol_step_tau_scope(step_tau):
+                out = stock_process_blocks(
+                    self, [vx, ax], context, attention_mask, timestep,
+                    [(v_pe, av_cross_v), (a_pe, av_cross_a)],
+                    transformer_options=stock_attention_options(
+                        {**transformer_options, _PAD_ROWS_KEY: pad_rows}),
+                    self_attention_mask=guide_bias, **kwargs,
+                )
             vx, ax = out[0], out[1]
             vx = sp_gather(vx, v_orig, dim=1)
             if has_audio:
                 ax = sp_gather(ax, a_orig, dim=1)
             return [vx, ax]
 
-        for block in diffusion_model.transformer_blocks:
+        dense_blocks = sol_attention.sol_dense_blocks_for(self.family)
+        for index, block in enumerate(diffusion_model.transformer_blocks):
             # Video self, audio self and both av cross attentions run over
             # sharded sequences, so they route through USP. comfy names a cross
             # attention for the stream it carries into the other, so
             # audio_to_video takes video queries (BasicAVTransformerBlock.forward).
-            self.bind(block.attn1, "forward", video_self)
-            self.bind(block.audio_attn1, "forward", audio_self)
+            # The official stage-2 policy keeps layer 0's self-attentions dense;
+            # the cross attentions follow the step tau.
+            video_fn = _dense_attention(video_self, index < dense_blocks)
+            audio_fn = _dense_attention(audio_self, index < dense_blocks)
+            self.bind(block.attn1, "forward", video_fn)
+            self.bind(block.audio_attn1, "forward", audio_fn)
             self.bind(block.audio_to_video_attn, "forward", audio_to_video)
             self.bind(block.video_to_audio_attn, "forward", video_to_audio)
         # comfy runs the two text connectors from extra_conds on every rank,
