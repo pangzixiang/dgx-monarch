@@ -24,11 +24,13 @@ SOL_HEAD_DIM: Final = 128
 SOL_DTYPE: Final = torch.bfloat16
 
 # Per family, the head dimension its geometry admits. H3 ships 24 decoder
-# layers and 128-wide heads; LTX ships 64-wide heads, which the official Sana
-# stage-2 policy runs through the same Triton reference backend.
+# layers and 128-wide heads; the LTX-2.5 stage-2 transformer also carries
+# 128-wide heads (its audio<->video crosses are 128-wide too, and they stay on
+# the dense path), which the official Sana stage-2 policy runs through the
+# same Triton reference backend.
 SOL_FAMILY_HEAD_DIMS: Final = {
     "minimax_h3": 128,
-    "ltx": 64,
+    "ltx": 128,
 }
 
 
@@ -124,8 +126,8 @@ def validate_bthd(q, k, v, expected_local_heads: int, head_dim: int) -> None:
     attention (the head counts agree) and no attention between streams of
     different length. It does not prove self-attention; an equal-length cross
     attention would pass. ``head_dim`` is the family's admitted head dimension
-    (SOL_FAMILY_HEAD_DIMS), so an LTX call is checked against 64, not the H3
-    128.
+    (SOL_FAMILY_HEAD_DIMS), so a call is checked against its family's own
+    admitted width.
     """
     for name, tensor in (("query", q), ("key", k), ("value", v)):
         if not isinstance(tensor, torch.Tensor) or tensor.ndim != 4:

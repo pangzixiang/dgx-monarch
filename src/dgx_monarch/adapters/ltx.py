@@ -451,13 +451,16 @@ class LTXAdapter(Adapter):
             # attention for the stream it carries into the other, so
             # audio_to_video takes video queries (BasicAVTransformerBlock.forward).
             # The official stage-2 policy keeps layer 0's self-attentions dense;
-            # the cross attentions follow the step tau.
+            # the cross attentions always run dense — the approximate kernel is
+            # admitted only for the self-attention geometry (64-wide heads).
             video_fn = _dense_attention(video_self, index < dense_blocks)
-            audio_fn = _dense_attention(audio_self, index < dense_blocks)
+            # The official stage-2 policy touches only video self-attention
+            # (``attn1``): audio self-attention and both AV crosses stay exact.
+            audio_fn = _dense_attention(audio_self, True)
             self.bind(block.attn1, "forward", video_fn)
             self.bind(block.audio_attn1, "forward", audio_fn)
-            self.bind(block.audio_to_video_attn, "forward", audio_to_video)
-            self.bind(block.video_to_audio_attn, "forward", video_to_audio)
+            self.bind(block.audio_to_video_attn, "forward", _dense_attention(audio_to_video, True))
+            self.bind(block.video_to_audio_attn, "forward", _dense_attention(video_to_audio, True))
         # comfy runs the two text connectors from extra_conds on every rank,
         # with no transformer_options; their stock self-attention must ignore
         # a pinned kernel too.

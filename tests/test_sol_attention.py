@@ -754,8 +754,8 @@ def test_the_dense_policy_is_per_family():
     assert sol.sol_dense_step((0, 20), 0.5) is True
 
 
-def test_ltx_admits_a_64_wide_head_and_the_waiver_names_its_own_guard(monkeypatch):
-    assert guards.sol_head_dim_for("ltx") == 64
+def test_ltx_admits_the_model_head_width_and_the_waiver_names_its_own_guard(monkeypatch):
+    assert guards.sol_head_dim_for("ltx") == 128
     assert guards.sol_head_dim_for("minimax_h3") == 128
     monkeypatch.setattr(accuracy_waiver, "waived", lambda _guard: False)
     with pytest.raises(UnsupportedModelError) as excinfo:

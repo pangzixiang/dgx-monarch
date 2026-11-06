@@ -118,6 +118,12 @@ SOL_DENSE_BLOCKS_FAMILY: Mapping[str, int] = MappingProxyType({
     "ltx": 1,
 })
 
+# Families whose published recipe keeps an exact-key sink prefix. The official
+# Sana stage-1 recipe keeps the packed non-video prefix exact; the stage-2 LTX
+# policy declares no sink at all (its call passes no sink_tokens), so an LTX
+# forward carries no prefix exemption and sol runs sink-free there.
+SOL_SINK_FAMILIES: Final = frozenset({"minimax_h3"})
+
 
 def sol_dense_blocks_for(family: str) -> int:
     """The leading dense transformer blocks for a family, zero when unknown."""
@@ -456,17 +462,25 @@ def make_sol_usp_attention(kernel: str, sync_ulysses: bool, *,
 
     def _run(q, k, v, softmax_scale):
         """The kernel call itself, or its exact stand-in on a dense step."""
+        if _SCOPE.dense:
+            # A dense step is exact torch attention: no kernel, no sparse
+            # geometry, and no waiver. This has to run before the head-dim
+            # admission because the dense stand-in accepts the full model
+            # geometry (LTX crosses are 128-wide) while the sparse kernel is
+            # only admitted at the family's own head width.
+            qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))
+            out = torch.nn.functional.scaled_dot_product_attention(
+                qh, kh, vh, scale=softmax_scale)
+            return out.transpose(1, 2).contiguous()
         if _waiver_required():  # backstop; the outer guard refuses first
             _assert_waived(str(scope.family))
         family = str(scope.family)
         guards.validate_bthd(q, k, v, preflight.expected_local_heads(),
                              guards.sol_head_dim_for(family))
-        sink_tokens = _current_sink(int(q.shape[1]))
-        if _SCOPE.dense:
-            qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))
-            out = torch.nn.functional.scaled_dot_product_attention(
-                qh, kh, vh, scale=softmax_scale)
-            return out.transpose(1, 2).contiguous()
+        if family in SOL_SINK_FAMILIES:
+            sink_tokens = _current_sink(int(q.shape[1]))
+        else:
+            sink_tokens = 0
         step_tau = _SCOPE.step_tau if _SCOPE.step_tau is not None else tau
         return sol_attn(
             q.contiguous(), k.contiguous(), v.contiguous(),
