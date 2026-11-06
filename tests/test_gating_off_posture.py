@@ -245,3 +245,50 @@ def test_troubleshooting_67_answers_the_question():
     assert "comfy_managed" in entry
     # The capacity entry, docs/TROUBLESHOOTING.md #5, must link here.
     assert "#67" in text.split("\n## 6. ", 1)[0]
+
+
+def _proven_pair(monkeypatch, tmp_path, model, handle):
+    """Journal one operator-written, bit-identical swap proof for this dispatch."""
+    from dgx_monarch import pair_admission
+
+    resident = {"unet_name": "resident.safetensors", "options": {}, "loras": []}
+    pair_admission.note_dispatch(handle, resident)
+    monkeypatch.setattr(
+        pair_admission.runtime_provenance,
+        "cached_dgx_source_manifest_sha256", lambda: "1" * 64)
+    requested = model.request_dict()
+    pair_admission.PairLedger(str(tmp_path)).record_pass(
+        pair_admission.pair_key(resident, requested), resident, requested,
+        {"reference_sha256": "a" * 64, "swap_sha256": "a" * 64})
+    return resident
+
+
+def test_a_proven_pair_swap_turns_the_levers_on(monkeypatch, tmp_path):
+    """The one sequence the fleet refuses to price becomes admissible: a
+    sequential swap of a pair the operator proved bit-identical."""
+    model, handle = _lora_model(
+        monkeypatch, tmp_path, auto_gate="off", state="unknown")
+    _proven_pair(monkeypatch, tmp_path, model, handle)
+
+    authorization = _authorize(model, handle)
+
+    assert authorization.residency_mode == "pair"
+    assert authorization.worker_args["slab_weights"] is True
+    assert authorization.worker_args["lora_low_rss"] is True
+    assert authorization.residency_grant is None
+
+
+def test_an_unproven_resident_keeps_the_ordinary_path(monkeypatch, tmp_path):
+    """A resident the operator never proved is not a pair: no levers, no grant."""
+    from dgx_monarch import pair_admission
+
+    model, handle = _lora_model(
+        monkeypatch, tmp_path, auto_gate="off", state="unknown")
+    pair_admission.note_dispatch(
+        handle, {"unet_name": "resident.safetensors", "options": {},
+                 "loras": []})
+
+    authorization = _authorize(model, handle)
+
+    assert authorization.residency_mode == "operator_off"
+    assert authorization.worker_args == _RISKY_POLICY

@@ -378,6 +378,15 @@ def _submit_render_guarded(
         guard.render_id = render_id
         consent_waiver.stamp_request(request, model, topo, world, render_id)
         request["_dgxm_normal_residency_mode"] = authorization.residency_mode
+        # Remember what this dispatch asks the fleet to hold: a later render of
+        # another model is a swap of this resident, and only a proven pair may
+        # turn the swap levers on.
+        try:
+            from .. import pair_admission
+
+            pair_admission.note_dispatch(handle, authorization.model_request)
+        except Exception:  # noqa: BLE001 - residency bookkeeping is best effort
+            pass
         if adoption_context is not None:
             request[_ADOPTION_CONTEXT_REQUEST_KEY] = adoption_context
         if authorization.residency_grant is not None:

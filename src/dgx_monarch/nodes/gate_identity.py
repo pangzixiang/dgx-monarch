@@ -374,6 +374,36 @@ def authorize_normal_render(
             "stock",
         )
 
+    if (not fsdp_proof_required and not fsdp_lora and not gate_active
+            and fleet_policy_is_risky(model_request, effective)):
+        # A sequential swap of a proven pair is the one dual-model sequence a
+        # one-model ceremony can still authorize: the pair ledger holds an
+        # operator-written, bit-identical swap proof for exactly these two
+        # requests, and the resident side is what this driver process itself
+        # dispatched. An unproven, unknown or stale pair takes the ordinary
+        # path below (stock, or the per-model gate).
+        try:
+            from .. import pair_admission
+            from .gate import _ledger_dir as _pair_ledger_dir
+
+            pair_grant = pair_admission.pair_swap_grant(
+                handle, model_request, ledger_dir=_pair_ledger_dir())
+        except Exception as error:  # noqa: BLE001 - pair authority is optional
+            pair_grant = None
+            safe_call(log.error, "pair residency lookup failed (%r)", error)
+        if pair_grant is not None:
+            log.info(
+                "pair residency grant %s: swapping %s -> %s with slab weights "
+                "and low-RSS LoRA placement",
+                pair_grant.get("key"), pair_grant["resident"].get("unet_name"),
+                pair_grant["requested"].get("unet_name"))
+            return NormalRenderAuthorization(
+                {**requested, "slab_weights": True, "lora_low_rss": True},
+                model_request,
+                None,
+                "pair",
+            )
+
     if ((not fleet_policy_is_risky(model_request, effective)
             and not fsdp_proof_required)
             or gate_active
