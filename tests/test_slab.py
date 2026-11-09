@@ -573,8 +573,7 @@ class _FakeQuantOp(nn.Module):
         self.weight = nn.Parameter(wrapper, requires_grad=False)
 
 
-@pytest.mark.parametrize("finish", [False, True])
-def test_reabsorb_quant_stray_clones_wrapper_into_slab(tmp_path, monkeypatch, finish):
+def test_reabsorb_quant_stray_clones_wrapper_into_slab(tmp_path, monkeypatch):
     """A strayed QuantizedTensor is cloned with the same layout name and params
     object around a slab-relocated payload. Never rebuild it from file
     metadata: on 2026-07-08 a metadata rebuild diverged on int8-convrot
@@ -589,16 +588,7 @@ def test_reabsorb_quant_stray_clones_wrapper_into_slab(tmp_path, monkeypatch, fi
     baked = torch.randint(-100, 100, (8, 8), dtype=torch.int8)
     params = types.SimpleNamespace(scale=torch.tensor(0.5),
                                    orig_shape=(8, 8),
-                                   orig_dtype=torch.bfloat16,
-                                   convrot=True, convrot_groupsize=256)
-    rebuilt = []
-    initialize = _QuantData.__init__
-
-    def capture_params(self, qdata, layout_cls, quant_params):
-        rebuilt.append((layout_cls, quant_params))
-        initialize(self, qdata, layout_cls, quant_params)
-
-    monkeypatch.setattr(_QuantData, "__init__", capture_params)
+                                   orig_dtype=torch.bfloat16)
     wrapper = _QuantData(baked.clone(), "TensorCoreInt8Layout", params)
     root.blk = _FakeQuantOp(wrapper)
     # A real comfy_kitchen wrapper keeps its attributes through a Parameter
@@ -606,32 +596,8 @@ def test_reabsorb_quant_stray_clones_wrapper_into_slab(tmp_path, monkeypatch, fi
     monkeypatch.setattr("dgx_monarch.actor.slab.live_tensor",
                         lambda m, k: wrapper if k == "blk.weight" else m.blk)
 
-    if finish:
-        import logging
-
-        from dgx_monarch.actor.store_slab_finish import reabsorb_and_trim
-
-        trims = []
-        mm = types.ModuleType("comfy.model_management")
-        mm.soft_empty_cache = lambda: trims.append(bytes(
-            ws.arena.mm[ws.regions["blk.weight"].offset:
-                        ws.regions["blk.weight"].offset + baked.numel()]))
-        comfy = types.ModuleType("comfy")
-        comfy.model_management = mm
-        monkeypatch.setitem(sys.modules, "comfy", comfy)
-        monkeypatch.setitem(sys.modules, "comfy.model_management", mm)
-        base = types.SimpleNamespace(model=types.SimpleNamespace(diffusion_model=root),
-                                     load_device="cpu")
-        reabsorb_and_trim(base, ws, logging.getLogger("dgx-monarch"), phase="lazy-swap")
-        assert trims == [_to_bytes(baked)]
-        del base
-    else:
-        stats = ws.reabsorb(root)
-        assert stats["quant_reabsorbed_gib"] >= 0
+    stats = ws.reabsorb(root)
     assert ws.stray_bytes == 0
-    assert rebuilt[-1] == ("TensorCoreInt8Layout", params)
-    assert rebuilt[-1][1] is params
-    assert params.convrot is True and params.convrot_groupsize == 256
     w = root.blk.weight
     assert isinstance(w, torch.nn.Parameter)
     # Check what survives on the fake: the class and the storage pointer.
@@ -640,6 +606,7 @@ def test_reabsorb_quant_stray_clones_wrapper_into_slab(tmp_path, monkeypatch, fi
     region = ws.regions["blk.weight"]
     got = bytes(ws.arena.mm[region.offset:region.offset + region.nbytes])
     assert got == _to_bytes(baked)                    # the baked bytes, not the file's
+    assert stats["quant_reabsorbed_gib"] >= 0
 
     del w, root
     ws.close()

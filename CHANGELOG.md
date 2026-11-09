@@ -2,11 +2,6 @@
 
 ## [Unreleased]
 
-- Return slab-resident weights to the same slab after a low-RSS LoRA change,
-  including quantized payloads rebuilt by lazy un-bake. Settle the copies and
-  trim retired allocator storage before publishing the new resident stack.
-  Initial loads use the same completion path; capacity pricing is unchanged.
-
 ## [1.5.0] - 2026-11-07
 
 **Upgrading from 1.4.0.** Follow [INSTALL](docs/INSTALL.md#upgrading-from-140). If a host's
