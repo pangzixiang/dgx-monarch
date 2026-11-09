@@ -15,7 +15,6 @@ import socket
 from dataclasses import replace
 from typing import Any
 
-from .. import resident_slots
 from ..log import get_logger
 from ..transfer_utils import failure_summary
 from . import actor_footprint, capacity_quote, store_fsdp
@@ -143,8 +142,7 @@ def _backup_bytes(worker: Any, store: Any, stored: Any, slot: str) -> int:
     try:
         base, active = stored.base_patcher, stored.active_patcher
         backup, patches, model = base.backup, active.patches, base.model
-        other = next((peer for name, peer in resident_slots.items(store)
-                      if name != slot and peer is not None), None)
+        other = store.uncond if slot == capacity_quote.SLOT_COND else store.current
         base_key = tuple(stored.base_key or ())
         if (store.lora_low_rss or other is not None or not stored.lora_sig
                 or not isinstance(backup, dict) or not isinstance(patches, dict) or not patches
@@ -178,7 +176,8 @@ def _resident_facts(worker: Any, store: Any, keys: dict[str, str | None] | None 
     """
     names: dict[str, str | None] = {}
     sizes: dict[str, int] = {}
-    for slot, stored in resident_slots.items(store):
+    for slot, stored in ((capacity_quote.SLOT_COND, getattr(store, "current", None)),
+                         (capacity_quote.SLOT_UNCOND, getattr(store, "uncond", None))):
         if keys is not None:
             key = getattr(stored, "request_key", None)
             keys[slot] = None if key is None else repr(key)
@@ -206,7 +205,7 @@ def _with_resident_bytes(snapshot: Any, facts: dict[str, Any], keys: dict[str, s
     credit and no old-model figures for a model the snapshot does not describe.
     """
     out = dict(snapshot) if isinstance(snapshot, dict) else {}
-    for slot in list(facts["resident_names"]):
+    for slot in capacity_quote.SLOTS:
         entry = out.get(slot)
         if not isinstance(entry, dict) or keys.get(slot) is None or keys[slot] != entry.get("request_key"):
             facts["resident_bytes"][slot], facts["resident_names"][slot] = 0, None
@@ -290,7 +289,7 @@ def _price(worker: Any, store: Any, spec: dict, *, snapshot: dict,
     unet_name = str(spec.get("unet_name") or "")
     options = spec.get("options")
     path = str(resolve_model_path("diffusion_models", unet_name))
-    stored = resident_slots.held(store, slot)
+    stored = store.uncond if slot == capacity_quote.SLOT_UNCOND else store.current
     # The same flag ``ensure`` reads before it drops the resident: a first stock
     # load that discovered a vouched family reloads into slab whatever the memo
     # says. It applies only to the checkpoint that set it.

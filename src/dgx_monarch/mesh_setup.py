@@ -119,7 +119,6 @@ SESSION_SCOPED_ENDPOINTS = frozenset({
     "gate_swap_cycle",
     "load_model",
     "load_uncond_model",
-    "load_refiner_model",
     "provenance_baseline",
     "unload",
 })

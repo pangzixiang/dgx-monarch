@@ -196,13 +196,6 @@ def run_sample(
     raise_if_sample_cancelled(cancel_event)
 
     model_spec = request["model"]
-    from ..resident_slots import attribute, primary, validate_refiner_topology
-
-    primary_slot = primary(model_spec)
-    if primary_slot == "refiner":
-        validate_refiner_topology(worker.topology)
-        if request.get("uncond_model") is not None:
-            raise ValueError("refiner slot does not accept a dual-checkpoint guider")
     model_sampling = normalize_model_sampling(model_spec.get("model_sampling"))
     uncond_sampling = None
     if request.get("uncond_model"):
@@ -270,18 +263,12 @@ def run_sample(
             worker._check_uma_reserve()
             uncond_patcher = None
         else:
-            if primary_slot == "refiner":
-                patcher, transition = store_fsdp.ensure(
-                    worker, model_spec["unet_name"], model_spec.get("options"),
-                    model_spec.get("loras"), slot="refiner", on_base_loaded=worker._inject_for_topology,
-                    rescue_consent=worker_env.sample_rescue_consent(request))
-            else:
-                patcher, transition = store_fsdp.ensure(
-                    worker, model_spec["unet_name"], model_spec.get("options"),
-                    model_spec.get("loras"), slot="cond", on_base_loaded=worker._inject_for_topology,
-                    rescue_consent=worker_env.sample_rescue_consent(request))
+            patcher, transition = store_fsdp.ensure(
+                worker, model_spec["unet_name"], model_spec.get("options"),
+                model_spec.get("loras"), slot="cond", on_base_loaded=worker._inject_for_topology,
+                rescue_consent=worker_env.sample_rescue_consent(request))
             worker_env.assert_resident_artifact_identity(
-                worker, primary_slot, expected_artifacts[0])
+                worker, "cond", expected_artifacts[0])
             raise_if_sample_cancelled(cancel_event)
 
             worker._check_uma_reserve()
@@ -313,7 +300,7 @@ def run_sample(
         # LoRA sets runs where no sequence parallelism drops it, and an
         # approximate one needs the Sol-Attn waiver (attention_pins.py).
         pins = attention_pins.render_summary(worker, (patcher, uncond_patcher))
-        resident = getattr(worker.store, attribute("uncond" if dm2_slot == "uncond" else primary_slot), None)
+        resident = getattr(worker.store, "uncond" if dm2_slot == "uncond" else "current", None)
         attention_pins.assert_waived(
             pins, worker.topology, family=getattr(resident, "family", None),
             alone=int(getattr(worker, "world", 0) or 0) < 2,

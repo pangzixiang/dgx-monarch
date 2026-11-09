@@ -31,7 +31,6 @@ from ..log import get_logger
 from ..mesh import MeshHandle, ensure_live
 from ..model_sampling import ModelSamplingSpec, freeze_model_sampling, normalize_model_sampling
 from ..qwen_image21_cache import normalize_qwen_image21_cache
-from ..resident_slots import attribute as slot_attribute
 from ..sampling_contract import latent_size_tags
 from ..skip_layer_guidance import SkipLayerGuidanceSpec, normalize_skip_layer_guidance
 from ..topology import Topology, choose_auto_topology, topology_from_preset
@@ -118,7 +117,6 @@ class ModelSpec:
         return replace(self, options=options)
 
     def request_dict(self) -> dict:
-        slot_attribute(self.slot)
         options = dict(self.options)
         cache = normalize_qwen_image21_cache(options.get("qwen_image21_cache"))
         if cache is not None:
@@ -129,8 +127,7 @@ class ModelSpec:
             "loras": [dict(entry) for entry in self.loras],
             "model_sampling": normalize_model_sampling(self.model_sampling),
             "skip_layer_guidance": normalize_skip_layer_guidance(self.skip_layer_guidance),
-        } | context_windows_field(self.context_windows) | (
-            {"slot": self.slot} if self.slot == "refiner" else {})
+        } | context_windows_field(self.context_windows)
 
 
 # A header sniff cannot tie checkpoint variant, graph shape, LoRA, quantization

@@ -166,12 +166,6 @@ Worker services stay running when ComfyUI closes. Use `dgxm down` when you inten
 
 One Spark also works: Init `mode=auto` without `cluster.toml` stays local. The memory tools, templates, sidebar, and diagnostics remain available.
 
-A serial finishing graph can use `DGXMonarchRefinerUNETLoader` for an
-independent resident model alongside the primary checkpoint. Its initial
-scope is pure Ulysses, CFG degree one and no FSDP. Read the
-[resident-refiner contract](docs/RESIDENT_REFINER.md) for capacity and cleanup
-rules; the graph supplies compatible latent conversion and conditioning.
-
 ## Before the first render
 
 With the default `auto_gate=first_use`, a new combination using slab and low-RSS or FSDP may run reference renders before producing your result. Allow **2-4 minutes** on the tested hardware. A successful check is reused for the same combination; an upgrade requires new checks before those results can be reused.

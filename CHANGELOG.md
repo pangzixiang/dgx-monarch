@@ -2,10 +2,6 @@
 
 ## [Unreleased]
 
-- Add an independent resident-refiner model slot and loader. Preserve peer
-  slots through ComfyUI memory reclamation, route sampling and capacity evidence
-  to the selected slot, and retain the low-RSS slab relocation fix.
-
 - Return slab-resident weights to the same slab after a low-RSS LoRA change,
   including quantized payloads rebuilt by lazy un-bake. Settle the copies and
   trim retired allocator storage before publishing the new resident stack.

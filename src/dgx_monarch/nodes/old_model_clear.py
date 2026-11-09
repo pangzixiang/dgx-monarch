@@ -323,8 +323,6 @@ def loader_offer(mesh: Any, unet_name: str, options: Any, *, windows: Iterable[A
         log.info("loader preflight could not ask the driver host's Workers what they "
                  "hold (%r); its own refusal stands", exc)
         return None
-    if any(old_model.requires_refiner_residency(answer.quotes) for answer in answers):
-        return None
     hosts = tuple(getattr(getattr(handle, "config", None), "hosts", None) or ())
     local = getattr(handle, "owns_hosts", True) is False or not hosts
     gpus = int(getattr(handle, "gpus_per_host", 1) or 1)
