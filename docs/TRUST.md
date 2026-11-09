@@ -1075,10 +1075,10 @@ copied from historical evidence.
   [`model_store.py:483-498`](../src/dgx_monarch/actor/model_store.py#L483-L498 "anchor:snapshot").
   Retention, refusal, and recovery are covered by
   [`test_slab.py:256-279`](../tests/test_slab.py#L256-L279 "anchor:test_close_attempts_annex_after_primary_arena_failure"),
-  [`test_slab.py:670-681`](../tests/test_slab.py#L670-L681 "anchor:test_close_retains_live_export_until_retry"),
-  [`test_slab.py:684-719`](../tests/test_slab.py#L684-L719 "anchor:test_arena_fd_close_uncertainty_is_terminal_and_never_retried"),
-  [`test_slab.py:722-765`](../tests/test_slab.py#L722-L765 "anchor:test_partial_weight_slab_preserves_primary_and_retains_uncertain_arena"),
-  [`test_slab.py:920-958`](../tests/test_slab.py#L920-L958 "anchor:test_slab_load_exposed_baseexception_has_durable_owner"),
+  [`test_slab.py:703-714`](../tests/test_slab.py#L703-L714 "anchor:test_close_retains_live_export_until_retry"),
+  [`test_slab.py:717-752`](../tests/test_slab.py#L717-L752 "anchor:test_arena_fd_close_uncertainty_is_terminal_and_never_retried"),
+  [`test_slab.py:755-798`](../tests/test_slab.py#L755-L798 "anchor:test_partial_weight_slab_preserves_primary_and_retains_uncertain_arena"),
+  [`test_slab.py:953-991`](../tests/test_slab.py#L953-L991 "anchor:test_slab_load_exposed_baseexception_has_durable_owner"),
   [`test_slab_instruction_handoffs.py:524-631`](../tests/test_slab_instruction_handoffs.py#L524-L631 "anchor:test_failed_hook_restore_guards_slab_until_later_confirmed_restore"),
   [`test_store_ensure.py:505-551`](../tests/test_store_ensure.py#L505-L551 "anchor:test_fsdp_pin_close_failure_blocks_reuse_until_exact_resource_retry"),
   [`test_store_ensure.py:554-608`](../tests/test_store_ensure.py#L554-L608 "anchor:test_fsdp_pin_fd_close_is_never_retried_after_release_then_raise"),
