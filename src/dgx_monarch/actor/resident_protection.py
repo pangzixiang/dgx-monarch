@@ -67,3 +67,20 @@ def peers(store: Any, slot: str) -> Iterator[None]:
         yield
     finally:
         _PROTECTED.reset(token)
+
+
+def bind_attention_for_sample(worker: Any, resident: Any) -> None:
+    """A reused primary must not inherit the last loaded refiner's family binding."""
+    if resident_slots.held(worker.store, "refiner") is None:
+        return
+    from ..adapters import adapter_for, attention_capability, sol_attention
+    from ..family_select import override_for_worker
+
+    model = resident.base_patcher.model
+    adapter = adapter_for(model, override_for_worker(worker))
+    family = getattr(adapter, "family", "unknown")
+    head_dim = getattr(adapter, "attention_head_dim", None)
+    worker._attn.bind_capability(family, head_dim)
+    attention = getattr(adapter, "attention_dispatch", lambda value: value)(worker._attn)
+    sol_attention.bind_sol_scope(attention, family)
+    attention_capability.assert_kernel_capability(worker._attn.effective_kernel, family, head_dim, model)

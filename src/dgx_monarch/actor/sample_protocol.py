@@ -314,6 +314,9 @@ def run_sample(
         # approximate one needs the Sol-Attn waiver (attention_pins.py).
         pins = attention_pins.render_summary(worker, (patcher, uncond_patcher))
         resident = getattr(worker.store, attribute("uncond" if dm2_slot == "uncond" else primary_slot), None)
+        from .resident_protection import bind_attention_for_sample
+
+        bind_attention_for_sample(worker, resident)
         attention_pins.assert_waived(
             pins, worker.topology, family=getattr(resident, "family", None),
             alone=int(getattr(worker, "world", 0) or 0) < 2,

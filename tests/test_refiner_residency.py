@@ -126,3 +126,26 @@ def test_unsupported_topology_refuses_before_model_load(monkeypatch, topology):
 
 def test_ulysses_topology_is_supported():
     resident_slots.validate_refiner_topology({"ulysses": 2, "cfg": 1, "ring": 1, "dp": 1})
+
+
+def test_primary_refiner_primary_rebinds_the_shared_attention_dispatch(monkeypatch):
+    from dgx_monarch import adapters, family_select
+    from dgx_monarch.adapters import attention_capability, sol_attention
+
+    bindings, checked, scopes = [], [], []
+    monkeypatch.setattr(adapters, "adapter_for", lambda model, _: model)
+    monkeypatch.setattr(family_select, "override_for_worker", lambda worker: None)
+    monkeypatch.setattr(attention_capability, "assert_kernel_capability",
+                        lambda *args: checked.append(args[1]))
+    monkeypatch.setattr(sol_attention, "bind_sol_scope", lambda attention, family: scopes.append(family))
+    dispatch = SimpleNamespace(bind_capability=lambda family, dim: bindings.append((family, dim)),
+                               effective_kernel="TORCH_FLASH")
+    store = ModelStore()
+    store.current, store.refiner = resident(), resident()
+    store.current.base_patcher.model = SimpleNamespace(family="draft", attention_head_dim=128)
+    store.refiner.base_patcher.model = SimpleNamespace(family="finish", attention_head_dim=64)
+    worker = SimpleNamespace(store=store, _attn=dispatch)
+    for stored in (store.current, store.refiner, store.current):
+        resident_protection.bind_attention_for_sample(worker, stored)
+    assert bindings == [("draft", 128), ("finish", 64), ("draft", 128)]
+    assert checked == scopes == ["draft", "finish", "draft"]

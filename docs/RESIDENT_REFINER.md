@@ -24,6 +24,8 @@ ComfyUI's public `free_memory(..., keep_loaded=...)` seam protects peer models
 only during a serialized GPU load or sample. The context is reset on failure
 or interruption. An explicit store-wide unload remains able to release all
 slots. The existing ComfyUI implementation and attention kernels are unchanged.
+Each sample rebinds the shared attention dispatch to the selected resident's
+family and head dimension, including a primary reused after a finishing pass.
 
 This is a residency mechanism, not a model-conversion implementation. Latent
 converters, upscalers, VAEs, conditioning and frame/audio handling belong to the
