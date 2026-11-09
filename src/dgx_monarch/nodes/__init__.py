@@ -9,12 +9,7 @@ from .gate import DGXMonarchIdentityGate
 from .guiders import DGXMonarchBasicGuider, DGXMonarchCFGGuider, DGXMonarchDualModelGuider
 from .h3_context_windows import DGXMonarchMiniMaxH3ContextWindows
 from .init import DGXMonarchInit
-from .loaders import (
-    DGXMonarchLoraLoader,
-    DGXMonarchRefinerUNETLoader,
-    DGXMonarchUncondUNETLoader,
-    DGXMonarchUNETLoader,
-)
+from .loaders import DGXMonarchLoraLoader, DGXMonarchUncondUNETLoader, DGXMonarchUNETLoader
 from .model_sampling import DGXMonarchModelSamplingMiniMaxH3, DGXMonarchModelSamplingSD3
 from .ops import DGXMonarchClearVRAM, DGXMonarchStatus
 from .qwen_image21_cache import DGXMonarchQwenImage21Cache
@@ -32,7 +27,6 @@ NODE_CLASS_MAPPINGS = {
     "DGXMonarchInit": DGXMonarchInit,
     "DGXMonarchUNETLoader": DGXMonarchUNETLoader,
     "DGXMonarchUncondUNETLoader": DGXMonarchUncondUNETLoader,
-    "DGXMonarchRefinerUNETLoader": DGXMonarchRefinerUNETLoader,
     "DGXMonarchLoraLoader": DGXMonarchLoraLoader,
     "DGXMonarchModelSamplingSD3": DGXMonarchModelSamplingSD3,
     "DGXMonarchModelSamplingMiniMaxH3": DGXMonarchModelSamplingMiniMaxH3,
@@ -58,7 +52,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DGXMonarchInit": "DGX Monarch Init",
     "DGXMonarchUNETLoader": "Load Diffusion Model (DGX Monarch)",
     "DGXMonarchUncondUNETLoader": "Load Unconditional Diffusion Model (DGX Monarch)",
-    "DGXMonarchRefinerUNETLoader": "Load Resident Refiner (DGX Monarch)",
     "DGXMonarchLoraLoader": "Load LoRA (DGX Monarch)",
     "DGXMonarchModelSamplingSD3": "Model Sampling SD3 (DGX Monarch)",
     "DGXMonarchModelSamplingMiniMaxH3": "ModelSamplingMiniMaxH3 (DGX Monarch)",

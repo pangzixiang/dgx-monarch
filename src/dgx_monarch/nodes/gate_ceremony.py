@@ -311,8 +311,7 @@ def gather_ceremony_evidence(
             raw_cycle = handle.call_all(
                 "gate_swap_cycle", model_request["unet_name"],
                 dict(model_request.get("options") or {}), stack, ceremony_identity,
-                timeout_s=1800,
-                **({"slot": "refiner"} if model_request.get("slot") == "refiner" else {}), **runtime["mesh_setup"].token_kwargs(cycle_token))
+                timeout_s=1800, **runtime["mesh_setup"].token_kwargs(cycle_token))
             slab_proof = establish(
                 ceremony_model, model_request, frozen_request,
                 artifact_binding, ceremony_identity, frozen_latent,

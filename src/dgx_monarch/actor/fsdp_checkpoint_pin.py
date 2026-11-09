@@ -281,9 +281,7 @@ def close_store_pins(store: Any) -> None:
     A worker stopped with its models loaded never runs the unload that
     removes the alias, and a killed process leaves the alias on disk.
     """
-    from ..resident_slots import items
-
-    for _, stored in items(store):
+    for stored in (getattr(store, "current", None), getattr(store, "uncond", None)):
         pin = getattr(stored, "fsdp_checkpoint_pin", None)
         if pin is not None:
             pin.close()

@@ -485,7 +485,7 @@ def agree_sample(handle: Any, request: dict) -> None:
     model = request.get("model")
     if not isinstance(model, dict):
         return
-    specs = [dict(model, slot=model.get("slot", "cond"))]
+    specs = [dict(model, slot="cond")]
     uncond = request.get("uncond_model")
     if isinstance(uncond, dict):
         specs.append(dict(uncond, slot="uncond"))

@@ -79,20 +79,6 @@ def _shortfall_gib(row: RankPrice) -> float:
     return (row.measured["required_bytes"] - row.measured["mem_available_bytes"]) / _GIB
 
 
-@pytest.mark.parametrize("target_refiner", [False, True])
-def test_resident_refiner_shortfall_cannot_offer_fleet_clear(target_refiner):
-    row = _stock("refuse", size_gib=19, avail_gib=27.4)
-    answer = _answer(0, row)
-    assert old_model.fleet_offer([(answer, row)], [answer], NEW).helps
-    if target_refiner:
-        row = replace(row, slot="refiner")
-    else:
-        row = replace(row, holds_resident={**row.holds_resident, "refiner": "slab"},
-                      resident_names={**row.resident_names, "refiner": "finishing.safetensors"})
-    answer = _answer(0, row)
-    assert old_model.fleet_offer([(answer, row)], [answer], NEW) is None
-
-
 @pytest.fixture(autouse=True)
 def _rig(monkeypatch, tmp_path):
     consent_pending.clear_all()

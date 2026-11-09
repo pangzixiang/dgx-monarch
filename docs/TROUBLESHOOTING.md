@@ -7963,17 +7963,3 @@ reads 1 (the console script) or 0, and the next `dgxm update --verify` passes.
 On 2026-11-06 the deploy of `79bb47e` succeeded on its first try after the
 reinstall on both hosts, with doctor at 50 checks and 0 failures
 ([VALIDATION](VALIDATION.md#host-memory-2026-11-06)).
-
-## 148. A finishing model reloads or the refiner slot refuses
-
-Use Load Resident Refiner for the finishing checkpoint, keep both loaders on
-the same pure-Ulysses mesh, and use CFG degree one without FSDP or a negative
-checkpoint. All hosts and the driver must use the same source manifest.
-The primary loader alone replaces its own checkpoint between stages.
-
-Read the per-slot model snapshot and capacity rows before changing settings.
-A capacity refusal retains peer residency and needs a smaller request or more
-free memory. Do not lower the floor or insert an automatic Clear VRAM node.
-See [resident refiner](RESIDENT_REFINER.md). Hardware claims require a measured
-run against the exact source; merely holding a Python model object is not a
-proof that its GPU weights stayed resident.

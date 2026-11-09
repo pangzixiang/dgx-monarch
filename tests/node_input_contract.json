@@ -126,9 +126,5 @@
   "DGXMonarchClearVRAM": {
     "required": [["mesh", "DGXM_MESH", null], ["level", "COMBO", "soft"]],
     "optional": [["include_driver", "BOOLEAN", true], ["samples", "LATENT", null]]
-  },
-  "DGXMonarchRefinerUNETLoader": {
-    "required": [["mesh", "DGXM_MESH", null], ["unet_name", "COMBO", "<first-option>"], ["weight_dtype", "COMBO", "default"]],
-    "hidden": [["unique_id", "UNIQUE_ID", null], ["prompt", "PROMPT", null]]
   }
 }

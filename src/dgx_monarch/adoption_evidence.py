@@ -475,9 +475,7 @@ def _model_artifact_paths(spec: dict, resolver: Any) -> list[tuple[str, str]]:
 
 
 def _resident_for_slot(worker: Any, slot: str) -> Any:
-    from .resident_slots import held
-
-    return held(worker.store, slot)
+    return worker.store.uncond if slot == "uncond" else worker.store.current
 
 
 def build_worker_evidence(
@@ -492,7 +490,7 @@ def build_worker_evidence(
     if CONTEXT_REQUEST_KEY not in request:
         return None
     context = validate_context(request[CONTEXT_REQUEST_KEY])
-    specs = [(request["model"].get("slot", "cond"), request["model"])]
+    specs = [("cond", request["model"])]
     if request.get("uncond_model") is not None:
         specs.append(("uncond", request["uncond_model"]))
     if len(specs) != len(expected_artifacts):
@@ -595,10 +593,10 @@ def _validate_artifact_evidence(value: object, *, ordinal: int) -> dict:
     return copy.deepcopy(row)
 
 
-def _validate_model_evidence(value: object, *, index: int, primary_slot: str = "cond") -> dict:
+def _validate_model_evidence(value: object, *, index: int) -> dict:
     row = _require_exact_keys(
         value, _MODEL_EVIDENCE_KEYS, "resident model evidence")
-    expected_slot = primary_slot if index == 0 else "uncond"
+    expected_slot = "cond" if index == 0 else "uncond"
     if row["slot"] != expected_slot:
         raise ResidentAdoptionEvidenceError(
             "resident model evidence slot order is invalid")
@@ -633,7 +631,6 @@ def validate_result_evidence(
     expected_request_sha256: str | None = None,
     expected_render_id_sha256: str | None = None,
     expected_setup_generation: int | None = None,
-    expected_primary_slot: str = "cond",
 ) -> list[dict]:
     """Require absent evidence normally, or one coherent row from every rank."""
     present = [
@@ -706,7 +703,7 @@ def validate_result_evidence(
                 "resident-adoption evidence model cardinality is invalid")
         copied = copy.deepcopy(row)
         copied["models"] = [
-            _validate_model_evidence(item, index=index, primary_slot=expected_primary_slot)
+            _validate_model_evidence(item, index=index)
             for index, item in enumerate(models)
         ]
         validated.append(copied)

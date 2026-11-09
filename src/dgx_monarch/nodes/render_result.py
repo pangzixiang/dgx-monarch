@@ -45,7 +45,6 @@ def _finish_render(
     expected_adoption_render_id_sha256: str | None = None,
     expected_adoption_setup_generation: int | None = None,
     telemetry_token: object | None = None,
-    expected_primary_slot: str = "cond",
 ) -> dict:
     """Cross-rank identity gate plus leader latent materialization."""
     verify_cross_rank_signatures(results, topo)
@@ -55,7 +54,6 @@ def _finish_render(
         expected_request_sha256=expected_adoption_request_sha256,
         expected_render_id_sha256=expected_adoption_render_id_sha256,
         expected_setup_generation=expected_adoption_setup_generation,
-        expected_primary_slot=expected_primary_slot,
     )
 
     # DP leaders each carry a batch slice; sort by dp_rank so the reconstructed
