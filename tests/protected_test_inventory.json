@@ -2205,7 +2205,7 @@
       "test_reabsorb": "c3aae84db3171272",
       "test_reabsorb_annex_cache_failure_follows_adopted_parameter": "a3013cdc18b5d4b5",
       "test_reabsorb_annex_short_still_takes_region_strays": "d40492a522a5573f",
-      "test_reabsorb_quant_stray_clones_wrapper_into_slab": "50e6696e65c0d58e",
+      "test_reabsorb_quant_stray_clones_wrapper_into_slab": "2279e2c126f70bd3",
       "test_reabsorb_quant_without_wrapper_attrs_stays_stray": "3b6ab3543c736339",
       "test_slab_bytes_and_alignment": "b701e8e2695423d3",
       "test_slab_contains_and_region_by_ptr": "56dd65c4d2b25725",
@@ -2338,6 +2338,9 @@
       "test_restore_failure_falls_back_to_full_reload": "622354a3b2aba13a",
       "test_restore_failure_releases_outgoing_model_before_drop": "bb65ae13c1f31e6b",
       "test_slab_and_fsdp_hot_swaps_keep_the_loaded_uuid": "053e75b78effbd55",
+      "test_slab_completion_failed_discard_keeps_the_slot_blocked": "b8425faec32b9b9f",
+      "test_slab_completion_failure_keeps_lazy_swap_recovery": "67b816d69fbe055d",
+      "test_slab_lazy_swap_completes_before_publishing_stack": "bce41547db1df326",
       "test_stack_change_captures_only_novel_keys": "1323528153932ed0",
       "test_strength_change_reuses_record_no_capture": "f441facb3f5bfe24",
       "test_unsupported_dtype_voids_unbake_record_but_bake_continues": "2d65c85b6c86e868"
