@@ -1067,6 +1067,12 @@ def test_partial_bring_up_rollback_stop_runs_off_the_loop():
 # loop, or the reason it is not a monarch future at all.
 # Duplicate pairs collapse: the pair is pinned, never the call count.
 _OFF_LOOP_BY_CONSTRUCTION = {
+    ("actor/resident_protection.py", "is_protected"):
+        "stdlib ContextVar.get, not a future",
+    ("actor/resident_protection.py", "_install.free_memory"):
+        "stdlib ContextVar.get, not a future",
+    ("actor/resident_protection.py", "peers"):
+        "stdlib ContextVar.get, not a future",
     ("mesh_recycle.py", "recycle_detailed_impl"):
         "inside recycle()'s dgxm-recycle scratch thread",
     ("mesh.py", "MeshHandle._shutdown_impl"):

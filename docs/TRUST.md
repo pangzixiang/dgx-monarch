@@ -187,7 +187,7 @@ process authority. The schema, strict append, and its
 placement before ceremony side effects are
 [`gate_ledger.py:160-189`](../src/dgx_monarch/gate_ledger.py#L160-L189 "anchor:_valid_entry_schema"),
 [`gate_ledger.py:487-524`](../src/dgx_monarch/gate_ledger.py#L487-L524 "anchor:begin_retest_required"), and
-[`gate_ceremony.py:210-256`](../src/dgx_monarch/nodes/gate_ceremony.py#L210-L256 "anchor:gather_ceremony_evidence").
+[`gate_ceremony.py:210-257`](../src/dgx_monarch/nodes/gate_ceremony.py#L210-L257 "anchor:gather_ceremony_evidence").
 Atomic multi-context denial, malformed-guard refusal, strict write/lock
 failure, and side-effect ordering are covered by
 [`test_gate_ledger.py:491-526`](../tests/test_gate_ledger.py#L491-L526 "anchor:test_retest_guard_atomically_denies_every_context_until_exact_finals"),
@@ -289,7 +289,7 @@ copied from historical evidence.
    clone, and pre-verdict drift check are enforced at
    [`gate_session.py:20-178`](../src/dgx_monarch/nodes/gate_session.py#L20-L178 "anchor:run_identity_ceremony"),
    [`gate_identity.py:263-278`](../src/dgx_monarch/nodes/gate_identity.py#L263-L278 "anchor:model_with_worker_overrides"), and
-   [`gate_ceremony.py:100-361`](../src/dgx_monarch/nodes/gate_ceremony.py#L100-L361 "anchor:gather_ceremony_evidence"); policy
+   [`gate_ceremony.py:100-362`](../src/dgx_monarch/nodes/gate_ceremony.py#L100-L362 "anchor:gather_ceremony_evidence"); policy
    drift is covered by
    [`test_gate_orchestration.py:2090-2121`](../tests/test_gate_orchestration.py#L2090-L2121 "anchor:test_identity_ceremony_rejects_policy_drift_before_pass").
    The immutable transaction walker accepts only the direct class exported
@@ -404,9 +404,9 @@ copied from historical evidence.
    malformed, duplicate, stale, unexpected, unvouched, or partial residency before
    comparison at
    [`slab_proof.py:23-90`](../src/dgx_monarch/nodes/slab_proof.py#L23-L90 "anchor:_cycle_state") and
-   [`slab_proof.py:93-173`](../src/dgx_monarch/nodes/slab_proof.py#L93-L173 "anchor:establish").
+   [`slab_proof.py:93-174`](../src/dgx_monarch/nodes/slab_proof.py#L93-L174 "anchor:establish").
    For a valid proof, every worker must then leave slab before a fresh stock
-   load at [`gate_ceremony.py:239-261`](../src/dgx_monarch/nodes/gate_ceremony.py#L239-L261 "anchor:gather_ceremony_evidence").
+   load at [`gate_ceremony.py:239-262`](../src/dgx_monarch/nodes/gate_ceremony.py#L239-L262 "anchor:gather_ceremony_evidence").
    FSDP disables slab residency, and it takes a LoRA stack only with
    `lora_low_rss` on at
    [`fsdp.py:355-367`](../src/dgx_monarch/adapters/fsdp.py#L355-L367 "anchor:validate_fsdp_launch_loras"),
@@ -435,7 +435,7 @@ copied from historical evidence.
    and compile preparation. The sole authoritative live-precision scan runs
    after that preparation and immediately before the first FSDP parameter
    mutation; direct calls use the same path. This is enforced by
-   [`store_fsdp.py:96-113`](../src/dgx_monarch/actor/store_fsdp.py#L96-L113 "anchor:validate_injection") and
+   [`store_fsdp.py:102-119`](../src/dgx_monarch/actor/store_fsdp.py#L102-L119 "anchor:validate_injection") and
    [`fsdp.py:379-437`](../src/dgx_monarch/adapters/fsdp.py#L379-L437 "anchor:apply_fsdp_capacity_mode"), with one-scan and same-patcher drift coverage in
    [`test_fsdp_capacity.py:1207-1207`](../tests/test_fsdp_capacity.py#L1207-L1207 "anchor:test_worker_runs_one_live_precision_scan_after_preparation"),
    [`test_fsdp_capacity.py:1237-1237`](../tests/test_fsdp_capacity.py#L1237-L1237 "anchor:test_worker_live_scan_observes_same_patcher_model_replacement"), and
@@ -531,9 +531,9 @@ copied from historical evidence.
    [`mesh_residency.py:159-239`](../src/dgx_monarch/mesh_residency.py#L159-L239 "anchor:assert_fleet_residency_grant"),
    [`mesh_rpc.py:245-367`](../src/dgx_monarch/mesh_rpc.py#L245-L367 "anchor:verify_request_artifacts"),
    [`worker_authorization.py:5-52`](../src/dgx_monarch/actor/worker_authorization.py#L5-L52 "anchor:verify_sample_artifact_authorization"), and
-   [`worker_authorization.py:96-106`](../src/dgx_monarch/actor/worker_authorization.py#L96-L106 "anchor:assert_resident_artifact_identity"),
+   [`worker_authorization.py:96-108`](../src/dgx_monarch/actor/worker_authorization.py#L96-L108 "anchor:assert_resident_artifact_identity"),
    with production call order at
-   [`sample_protocol.py:181-459`](../src/dgx_monarch/actor/sample_protocol.py#L181-L459 "anchor:run_sample").
+   [`sample_protocol.py:181-466`](../src/dgx_monarch/actor/sample_protocol.py#L181-L466 "anchor:run_sample").
    Driver and worker failures are covered by
    [`test_fleet.py:678-712`](../tests/test_fleet.py#L678-L712 "anchor:test_fleet_forces_stock_policy_until_exact_context_pass"),
    [`test_fleet.py:753-822`](../tests/test_fleet.py#L753-L822 "anchor:test_fleet_preserves_requested_policy_only_for_exact_context_pass"),
@@ -606,7 +606,7 @@ copied from historical evidence.
     Authorization, setup binding, driver validation, and
     worker revalidation are
     [`gate_identity.py:333-481`](../src/dgx_monarch/nodes/gate_identity.py#L333-L481 "anchor:authorize_normal_render"),
-    [`render_submit.py:249-487`](../src/dgx_monarch/nodes/render_submit.py#L249-L487 "anchor:_submit_render_guarded"),
+    [`render_submit.py:249-489`](../src/dgx_monarch/nodes/render_submit.py#L249-L489 "anchor:_submit_render_guarded"),
     [`mesh_residency.py:92-155`](../src/dgx_monarch/mesh_residency.py#L92-L155 "anchor:assert_normal_render_residency_mode"),
     [`mesh_residency.py:242-374`](../src/dgx_monarch/mesh_residency.py#L242-L374 "anchor:assert_normal_render_residency_grant"),
     [`mesh_rpc.py:245-367`](../src/dgx_monarch/mesh_rpc.py#L245-L367 "anchor:verify_request_artifacts"), and
@@ -656,7 +656,7 @@ copied from historical evidence.
     ledger publication. An injected observer runs only after this mandatory
     check, so it cannot replace the cohort authority. The bracket is
     [`gate_provenance.py:19-106`](../src/dgx_monarch/nodes/gate_provenance.py#L19-L106 "anchor:ProofCohortAttestor") and
-    [`gate_ceremony.py:236-361`](../src/dgx_monarch/nodes/gate_ceremony.py#L236-L361 "anchor:gather_ceremony_evidence"), covered by
+    [`gate_ceremony.py:236-362`](../src/dgx_monarch/nodes/gate_ceremony.py#L236-L362 "anchor:gather_ceremony_evidence"), covered by
     [`test_gate_orchestration.py:1559-1616`](../tests/test_gate_orchestration.py#L1559-L1616 "anchor:test_provenance_bracket_precedes_every_gate_pass_publication"),
     [`test_gate_orchestration.py:3496-3552`](../tests/test_gate_orchestration.py#L3496-L3552 "anchor:test_default_provenance_attestor_rejects_incomplete_or_mixed_cohort_preproof"),
     [`test_gate_orchestration.py:3555-3590`](../tests/test_gate_orchestration.py#L3555-L3590 "anchor:test_default_provenance_rpc_failure_never_publishes_a_terminal_row"),
@@ -820,10 +820,10 @@ copied from historical evidence.
   boundaries are
   [`gate_identity.py:281-291`](../src/dgx_monarch/nodes/gate_identity.py#L281-L291 "anchor:model_for_request"),
   [`gate_identity.py:333-481`](../src/dgx_monarch/nodes/gate_identity.py#L333-L481 "anchor:authorize_normal_render"),
-  [`render_submit.py:249-487`](../src/dgx_monarch/nodes/render_submit.py#L249-L487 "anchor:_submit_render_guarded"),
+  [`render_submit.py:249-489`](../src/dgx_monarch/nodes/render_submit.py#L249-L489 "anchor:_submit_render_guarded"),
   [`mesh_rpc.py:245-367`](../src/dgx_monarch/mesh_rpc.py#L245-L367 "anchor:verify_request_artifacts"),
   [`worker_authorization.py:5-52`](../src/dgx_monarch/actor/worker_authorization.py#L5-L52 "anchor:verify_sample_artifact_authorization"), and
-  [`worker_authorization.py:96-106`](../src/dgx_monarch/actor/worker_authorization.py#L96-L106 "anchor:assert_resident_artifact_identity"), with source-skew coverage in
+  [`worker_authorization.py:96-108`](../src/dgx_monarch/actor/worker_authorization.py#L96-L108 "anchor:assert_resident_artifact_identity"), with source-skew coverage in
   [`test_runtime_remediation.py:1754-1780`](../tests/test_runtime_remediation.py#L1754-L1780 "anchor:test_normal_grant_rejects_driver_worker_source_manifest_mismatch").
 
 - A persisted runtime grant exists only when contextual lookup selects a
@@ -928,7 +928,7 @@ copied from historical evidence.
   same transaction get no skip
   ([`gate_inconclusive.py:265-265`](../src/dgx_monarch/nodes/gate_inconclusive.py#L265-L265 "anchor:remember_kind")).
   This is enforced at
-  [`common.py:306-384`](../src/dgx_monarch/nodes/common.py#L306-L384 "anchor:run_render"),
+  [`common.py:310-388`](../src/dgx_monarch/nodes/common.py#L310-L388 "anchor:run_render"),
   [`auto_gate.py:201-268`](../src/dgx_monarch/nodes/auto_gate.py#L201-L268 "anchor:auto_gate_required"),
   [`auto_gate.py:271-484`](../src/dgx_monarch/nodes/auto_gate.py#L271-L484 "anchor:maybe_auto_gate"), and
   [`pipeline.py:282-367`](../src/dgx_monarch/nodes/pipeline.py#L282-L367 "anchor:_push_bound"), with
@@ -965,8 +965,8 @@ copied from historical evidence.
   a provisional FSDP PASS performs the same cleanup on the exact ceremony
   handle before refusing the full render. The
   abort path, and the price that precedes it, are
-  [`gate_ceremony.py:333-458`](../src/dgx_monarch/nodes/gate_ceremony.py#L333-L458 "anchor:gather_ceremony_evidence"),
-  [`gate_ceremony.py:191-230`](../src/dgx_monarch/nodes/gate_ceremony.py#L191-L230 "anchor:gather_ceremony_evidence"),
+  [`gate_ceremony.py:333-459`](../src/dgx_monarch/nodes/gate_ceremony.py#L333-L459 "anchor:gather_ceremony_evidence"),
+  [`gate_ceremony.py:191-231`](../src/dgx_monarch/nodes/gate_ceremony.py#L191-L231 "anchor:gather_ceremony_evidence"),
   [`fsdp_reload_price.py:242-283`](../src/dgx_monarch/fsdp_reload_price.py#L242-L283 "anchor:price_fsdp_clean_reload") and
   [`gate_session.py:20-178`](../src/dgx_monarch/nodes/gate_session.py#L20-L178 "anchor:run_identity_ceremony"),
   [`gate_fsdp.py:179-235`](../src/dgx_monarch/nodes/gate_fsdp.py#L179-L235 "anchor:cleanup_aborted_fsdp_proof"),
@@ -1045,7 +1045,7 @@ copied from historical evidence.
   integration, ownership, refusal, status, platform binding, and release are
   [`comfy_bridge.py:162-268`](../src/dgx_monarch/actor/comfy_bridge.py#L162-L268 "anchor:slab_load"),
   [`comfy_bridge.py:271-330`](../src/dgx_monarch/actor/comfy_bridge.py#L271-L330 "anchor:load_diffusion_model_slab"),
-  [`model_store.py:238-341`](../src/dgx_monarch/actor/model_store.py#L238-L341 "anchor:ensure"),
+  [`model_store.py:240-343`](../src/dgx_monarch/actor/model_store.py#L240-L343 "anchor:ensure"),
   [`slab_lifetime.py:22-22`](../src/dgx_monarch/actor/slab_lifetime.py#L22-L22 "anchor:_RETAINED_FAILED_LOAD_SLABS"),
   [`slab_lifetime.py:28-28`](../src/dgx_monarch/actor/slab_lifetime.py#L28-L28 "anchor:_RETAINED_FAILED_LOAD_RESOURCES"),
   [`slab_lifetime.py:32-32`](../src/dgx_monarch/actor/slab_lifetime.py#L32-L32 "anchor:_FAILED_LOAD_CLEANUP_POISONED"),
@@ -1070,9 +1070,9 @@ copied from historical evidence.
   [`slab_lifetime.py:203-252`](../src/dgx_monarch/actor/slab_lifetime.py#L203-L252 "anchor:release_after_explicit_unload"),
   [`slab_lifetime.py:255-378`](../src/dgx_monarch/actor/slab_lifetime.py#L255-L378 "anchor:cleanup_failed_load"),
   [`model_store.py:408-451`](../src/dgx_monarch/actor/model_store.py#L408-L451 "anchor:_drop"),
-  [`model_store.py:465-465`](../src/dgx_monarch/actor/model_store.py#L465-L465 "anchor:unload_all"),
-  [`model_store.py:473-476`](../src/dgx_monarch/actor/model_store.py#L473-L476 "anchor:release_retained_cleanup"), and
-  [`model_store.py:483-498`](../src/dgx_monarch/actor/model_store.py#L483-L498 "anchor:snapshot").
+  [`model_store.py:465-466`](../src/dgx_monarch/actor/model_store.py#L465-L466 "anchor:unload_all"),
+  [`model_store.py:474-477`](../src/dgx_monarch/actor/model_store.py#L474-L477 "anchor:release_retained_cleanup"), and
+  [`model_store.py:484-498`](../src/dgx_monarch/actor/model_store.py#L484-L498 "anchor:snapshot").
   Retention, refusal, and recovery are covered by
   [`test_slab.py:256-279`](../tests/test_slab.py#L256-L279 "anchor:test_close_attempts_annex_after_primary_arena_failure"),
   [`test_slab.py:703-714`](../tests/test_slab.py#L703-L714 "anchor:test_close_retains_live_export_until_retry"),

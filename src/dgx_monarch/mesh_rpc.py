@@ -187,7 +187,7 @@ def call_all_bound(
             # Both attempts failed: raise the first ordinary failure.
             raise_with_distinct_cause(first_clear_error, clear_cause)
     values = [value for _point, value in value_mesh.items()]
-    if endpoint_name in ("load_model", "load_uncond_model"):
+    if endpoint_name in ("load_model", "load_uncond_model", "load_refiner_model"):
         from .actor.model_store import request_artifact_identity
 
         unet_name = args[0] if args else kwargs["unet_name"]

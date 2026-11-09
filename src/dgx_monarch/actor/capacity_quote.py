@@ -62,8 +62,8 @@ PROBE_REUSE = "worker_reuse"
 
 SLOT_COND = "cond"
 SLOT_UNCOND = "uncond"
-SLOTS = (SLOT_COND, SLOT_UNCOND)
-
+SLOT_REFINER = "refiner"
+SLOTS = (SLOT_COND, SLOT_UNCOND, SLOT_REFINER)
 # Reported for a slot whose load is in flight or whose cleanup failed. Never a
 # residency a decision can report: it says the box held what the store cannot.
 RESIDENCY_IN_FLIGHT = "in_flight"
@@ -266,7 +266,8 @@ def _holds_this_checkpoint(entry: Any, request_key: str) -> bool:
 
 def _slot_context(snapshot: dict, slot: str, request_key: str) -> dict[str, Any]:
     """The half of a row that describes the box rather than the price."""
-    holds = {name: _resident_word(snapshot.get(name)) for name in SLOTS}
+    holds = {name: _resident_word(snapshot.get(name)) for name in SLOTS
+             if name != SLOT_REFINER or snapshot.get(name) is not None or slot == SLOT_REFINER}
     entry = snapshot.get(slot)
     failed = set(snapshot.get("cleanup_failed_slots") or ())
     if slot in failed:

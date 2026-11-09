@@ -10,7 +10,7 @@ import threading
 from contextlib import suppress
 from typing import Any
 
-from .. import lora_quant_guard
+from .. import lora_quant_guard, resident_slots
 from ..adapters import fsdp_shard_build
 from ..capacity_fit import SLAB_VOUCHED_FAMILIES as SLAB_VOUCHED_FAMILIES
 from ..constants import TRANSITION_REUSE
@@ -20,6 +20,7 @@ from ..transfer_utils import failure_summary
 from . import (
     lora_shape_guard,
     resident_ledger,
+    resident_protection,
     slab_lifetime,
     store_bake,
     store_detect,
@@ -112,7 +113,8 @@ class ModelStore:
 
     def __init__(self) -> None:
         self.current: StoredModel | None = None
-        self.uncond: StoredModel | None = None  # second model slot for the dual-model guider (Ideogram4)
+        self.uncond: StoredModel | None = None  # dual-model CFG
+        self.refiner: StoredModel | None = None  # independent video finishing model
         # comfy's unload_all_models() is global: dropping or quant-hot-swapping one
         # slot evicts the other slot's GPU weights too. Instance lifetime, keyed by
         # slot name; a reload or reuse of that slot clears it, and the reuse log says so.
@@ -156,7 +158,7 @@ class ModelStore:
             return
         previous = self.slab_weights
         self.slab_weights = mode
-        for slot in ("cond", "uncond"):
+        for slot in resident_slots.ATTRIBUTES:
             stored = self._stored(slot)
             if stored is None:
                 continue
@@ -189,7 +191,7 @@ class ModelStore:
             return
         previous = self.lora_low_rss
         self.lora_low_rss = low_rss
-        for slot in ("cond", "uncond"):
+        for slot in resident_slots.ATTRIBUTES:
             stored = self._stored(slot)
             if stored is None:
                 continue
@@ -202,14 +204,14 @@ class ModelStore:
         log.info("lora residency mode: %s", "low_rss (merge-free)" if low_rss else "hot_swap (baked)")
 
     def _stored(self, slot: str) -> StoredModel | None:
-        return self.uncond if slot == "uncond" else self.current
+        return resident_slots.held(self, slot)
 
     def _mark_other_slot_evicted(self, slot: str) -> None:
         """After a global unload for `slot`: mark the other resident slot evicted (it
         reloads its GPU weights on next use) and clear `slot`, which is being replaced or emptied."""
-        other = "cond" if slot == "uncond" else "uncond"
-        if self._stored(other) is not None:
-            self._gpu_evicted.add(other)
+        for other, stored in resident_slots.items(self):
+            if other != slot and stored is not None and not resident_protection.is_protected(stored):
+                self._gpu_evicted.add(other)
         self._gpu_evicted.discard(slot)
 
     @staticmethod
@@ -270,7 +272,7 @@ class ModelStore:
                 "proving the worker-local FSDP checkpoint header",
             )
 
-        stored = self.uncond if slot == "uncond" else self.current
+        stored = self._stored(slot)
         base_key, request_key = self.make_keys(unet_name, options, lora_stack, quant_kind)
         authoritative_slab_retry = False
 
@@ -345,7 +347,6 @@ class ModelStore:
             fsdp_checkpoint_proof, authoritative_slab_retry, rescue_consent,
             request_artifact_identity=request_artifact_identity,
             resolve_model_path=resolve_model_path, logger=log)
-
     def _lazy_swap(self, stored, active, unet_name: str):
         if getattr(stored.base_patcher, "_dgxm_fsdp", False):
             from . import fsdp_lora
@@ -354,7 +355,6 @@ class ModelStore:
         return store_bake.lazy_swap(self, stored, active, unet_name)
 
     _audit_swap_dtypes = staticmethod(store_bake.audit_swap_dtypes)
-
     def _verify_key(self, active, key: str) -> None:
         return store_bake.verify_key(self, active, key)
 
@@ -403,7 +403,7 @@ class ModelStore:
     _invalidate_gpu_weights = staticmethod(store_bake.invalidate_gpu_weights)
 
     def _drop(self, slot: str) -> None:
-        stored = self.uncond if slot == "uncond" else self.current
+        stored = self._stored(slot)
         if stored is None:
             self._drop_failed.discard(slot)
             return
@@ -428,14 +428,14 @@ class ModelStore:
                 slab_lifetime.retain(stored)
             elif owner_kind:
                 slab_lifetime._retain_resource(stored)
-            setattr(self, "uncond" if slot == "uncond" else "current", None)
+            setattr(self, resident_slots.attribute(slot), None)
         except BaseException as exc:
-            setattr(self, "uncond" if slot == "uncond" else "current", stored)
+            setattr(self, resident_slots.attribute(slot), stored)
             self._drop_failed.add(slot)
             self._gpu_evicted.add(slot)
-            other = "cond" if slot == "uncond" else "uncond"
-            if self._stored(other) is not None:
-                self._gpu_evicted.add(other)
+            for other, peer in resident_slots.items(self):
+                if other != slot and peer is not None and not resident_protection.is_protected(peer):
+                    self._gpu_evicted.add(other)
             if not isinstance(exc, Exception):
                 raise
             raise RuntimeError(
@@ -451,7 +451,7 @@ class ModelStore:
         resident_ledger.flush_dropped(mm, slot)
 
     def cleanup_active(self) -> None:
-        for stored in (self.current, self.uncond):
+        for _, stored in resident_slots.items(self):
             if stored is not None:
                 try:
                     stored.active_patcher.cleanup()
@@ -459,7 +459,9 @@ class ModelStore:
                     pass
 
     def unload_all(self) -> None:
-        resident_ledger.pin_store_for_unload(self.current, self.uncond)
+        resident_ledger.pin_store_for_unload(*(held for _, held in resident_slots.items(self)))
+        if self.refiner is not None:
+            self._drop("refiner")
         self._drop("uncond")
         self._drop("cond")
         self.release_retained_cleanup()
@@ -490,8 +492,7 @@ class ModelStore:
             }
 
         return {
-            "cond": describe(self.current),
-            "uncond": describe(self.uncond),
+            **{slot: describe(value) for slot, value in resident_slots.items(self)},
             "cleanup_failed_slots": sorted(self._drop_failed),
             "failed_load_cleanup_pending": slab_lifetime.cleanup_pending(),
             "retained_failed_load_slabs": slab_lifetime.retained_count(),

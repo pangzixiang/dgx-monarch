@@ -18,6 +18,7 @@ EXPECTED_NODE_KEYS = {
     "DGXMonarchInit",
     "DGXMonarchUNETLoader",
     "DGXMonarchUncondUNETLoader",
+    "DGXMonarchRefinerUNETLoader",
     "DGXMonarchLoraLoader",
     "DGXMonarchModelSamplingSD3",
     "DGXMonarchModelSamplingMiniMaxH3",
