@@ -176,6 +176,102 @@ def test_strength_change_reuses_record_no_capture(rig):
     assert store.current.lora_sig == lora_signature(STACK_A2)
 
 
+@pytest.mark.parametrize(("old_stack", "new_stack"), [
+    (STACK_A, STACK_A2),
+    (STACK_A, STACK_A + STACK_B),
+    (STACK_A + STACK_B, STACK_A),
+    (STACK_A, []),
+    ([], STACK_A),
+])
+def test_slab_lazy_swap_completes_before_publishing_stack(rig, monkeypatch, old_stack, new_stack):
+    store, calls = rig
+    store.current = _stored(old_stack)
+    store.current.base_patcher.model = SimpleNamespace(diffusion_model=object())
+    before_key = store.current.request_key
+    events = []
+
+    def reabsorb(model):
+        assert model is store.current.base_patcher.model.diffusion_model
+        assert store.current.request_key == before_key
+        assert "cond" in store._drop_failed
+        events.append("reabsorb")
+        return {"quant_reabsorbed_gib": 2.0}
+
+    slab = SimpleNamespace(reabsorb=reabsorb, total_gib=4.0)
+    store.current.slab = slab
+    mm = types.ModuleType("comfy.model_management")
+    mm.soft_empty_cache = lambda: events.append("trim")
+    monkeypatch.setitem(sys.modules, "comfy.model_management", mm)
+    monkeypatch.setattr(sys.modules["comfy"], "model_management", mm, raising=False)
+
+    _, transition = store.ensure("m.safetensors", None, new_stack)
+    assert transition == "hot-swap" and events == ["reabsorb", "trim"]
+    assert store.current.slab is slab and not store._drop_failed
+    assert store.current.lora_sig == lora_signature(new_stack)
+    assert calls.drop == calls.load == 0
+    _, transition = store.ensure("m.safetensors", None, new_stack)
+    assert transition == "reuse" and events == ["reabsorb", "trim"]
+
+
+@pytest.mark.parametrize("stage", ["reabsorb", "trim"])
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_slab_completion_failure_keeps_lazy_swap_recovery(rig, monkeypatch, stage, interrupted):
+    class FinishAbort(BaseException):
+        pass
+
+    store, calls = rig
+    store.current = _stored(STACK_A)
+    store.current.base_patcher.model = SimpleNamespace(diffusion_model=object())
+    before_key = store.current.request_key
+    failure = FinishAbort("finish interrupted") if interrupted else RuntimeError("finish failed")
+
+    def step(name):
+        assert store.current.request_key == before_key
+        assert "cond" in store._drop_failed
+        if name == stage:
+            raise failure
+        return {}
+
+    store.current.slab = SimpleNamespace(reabsorb=lambda _model: step("reabsorb"), total_gib=4.0)
+    mm = types.ModuleType("comfy.model_management")
+    mm.soft_empty_cache = lambda: step("trim")
+    monkeypatch.setitem(sys.modules, "comfy.model_management", mm)
+    monkeypatch.setattr(sys.modules["comfy"], "model_management", mm, raising=False)
+    if interrupted:
+        with pytest.raises(FinishAbort) as caught:
+            store.ensure("m.safetensors", None, STACK_A2)
+        assert caught.value is failure
+        assert store.current is None and calls.load == 0 and calls.drop == 1
+    else:
+        _, transition = store.ensure("m.safetensors", None, STACK_A2)
+        assert transition == "load" and calls.drop >= 1 and calls.load == 1
+
+
+def test_slab_completion_failed_discard_keeps_the_slot_blocked(rig, monkeypatch):
+    from dgx_monarch.actor import store_slab_finish
+
+    store, _calls = rig
+    store.current = _stored(STACK_A)
+    store.current.slab = object()
+    before_key = store.current.request_key
+
+    def fail_finish(*_args, **_kwargs):
+        raise RuntimeError("slab finish failed")
+
+    def fail_drop(_self, _slot):
+        raise OSError("discard failed")
+
+    monkeypatch.setattr(store_slab_finish, "reabsorb_and_trim", fail_finish)
+    monkeypatch.setattr(ModelStore, "_drop", fail_drop)
+    with pytest.raises(RuntimeError, match="slab finish failed") as caught:
+        store.ensure("m.safetensors", None, STACK_A2)
+    assert store.current.request_key == before_key
+    assert store.snapshot()["cleanup_failed_slots"] == ["cond"]
+    assert any("discard also failed" in note for note in caught.value.__notes__)
+    with pytest.raises(RuntimeError, match="previous unload failed"):
+        store.ensure("m.safetensors", None, STACK_A)
+
+
 def test_stack_change_captures_only_novel_keys(rig):
     store, calls = rig
     store.current = _stored(STACK_A)

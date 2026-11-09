@@ -16,7 +16,7 @@ from .. import attention_pins, fp8_compute, lora_quant_guard, residency_mode
 from ..compile_policy import compile_dit_blocks_slab, compile_dit_is_known_noop
 from ..constants import TRANSITION_LOAD
 from ..transfer_utils import raise_with_distinct_cause, reconcile_error
-from . import actor_footprint, load_fault, store_detect, store_identity, store_residency
+from . import actor_footprint, load_fault, store_detect, store_identity, store_residency, store_slab_finish
 
 
 def fresh_load(
@@ -272,18 +272,7 @@ def fresh_load(
                                                 capacity_fit.slab_floor_bytes(size, reserve_bytes))
                 unbake_record = _merge_and_free(active, base_path=path)
         if slab is not None:
-            # comfy's first-load bake (and the F32->live-dtype pre-cast)
-            # replace some Parameters with cudaMalloc tensors; migrate them
-            # back into slab memory so residency stays 1x in the slab.
-            import comfy.model_management as mm
-
-            stats = slab.reabsorb(base.model.diffusion_model)
-            mm.soft_empty_cache()
-            logger.info("slab residency: %.2f GiB slab, reabsorbed %s strays (%s GiB)%s",
-                        slab.total_gib, stats.get("reabsorbed", 0),
-                        stats.get("reabsorbed_gib", 0.0),
-                        f", quant strays {stats['quant_stray_gib']} GiB stay in cudaMalloc"
-                        if stats.get("quant_stray_gib") else "")
+            store_slab_finish.reabsorb_and_trim(base, slab, logger, phase="load")
         fsdp = bool(getattr(base, "_dgxm_fsdp", False))
         stock = slab is None and not fsdp and decision.residency != residency_mode.MODE_COMFY_MANAGED
         if slab is not None or fsdp or stock:
