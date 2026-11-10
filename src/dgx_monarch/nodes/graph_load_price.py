@@ -21,7 +21,6 @@ from .. import box_names, consent_pending, driver_footprint
 from ..log import get_logger
 from .graph_live import SWITCH_TITLES, is_link, live_nodes
 from .graph_twins import _SHARDED_KINDS, _gib, _join, dit_twins, model_twins
-from .h3_reference_completion import credit as completed_reference_credit
 from .loader_graph import DriverStackTerms, credited_terms, remember
 
 log = get_logger(__name__)
@@ -64,7 +63,7 @@ def _site_words(site: str) -> str:
 _PRICED_PROMPTS: dict[str, None] = {}
 
 
-def site_terms(terms: DriverStackTerms, site: str, *, prompt: object = None) -> DriverStackTerms:
+def site_terms(terms: DriverStackTerms, site: str) -> DriverStackTerms:
     """The terms the price charges at ``site``, held models credited.
 
     At a render site the graph's encoders have run, so ComfyUI's held bytes are
@@ -75,7 +74,7 @@ def site_terms(terms: DriverStackTerms, site: str, *, prompt: object = None) -> 
     a re-queue the box just rendered.
     """
     if site not in RENDER_SITES:
-        return completed_reference_credit(credited_terms(terms), prompt)
+        return credited_terms(terms)
     return replace(credited_terms(terms, HELD_ENCODER_RATIO), ref_bytes=0, guide_bytes=0,
                    activation_bytes=0, guide_note=f"encoded before {_SITE_NODES[site]}",
                    activation_note="the render-site checks price them next")
@@ -209,7 +208,7 @@ def loader_refusal(
     windows, so the DiT ceiling quoted is one that clears every failing window.
     """
     notes = estimate.notes
-    ref_note = terms.ref_encode_note or (f"{terms.video_refs} reference video block(s), single-shape "
+    ref_note = (f"{terms.video_refs} reference video block(s), single-shape "
                 f"calibration 2026-08-04, not extrapolated"
                 if terms.ref_bytes else
                 f"encoded before {_SITE_NODES[site]}" if site in RENDER_SITES and terms.video_refs else
