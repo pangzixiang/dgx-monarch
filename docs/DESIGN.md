@@ -1698,6 +1698,19 @@ Encoder/VAE/model charges, render activation and host floors, subsequent runtime
 reference-row checks and both-rank admission stay unchanged. This optional
 in-process integration is not a measured lower calibration for cold encoding.
 
+**A loader before a live native LoRA does not strip the resident blend.** With
+an explicit topology, a loader whose backend node ID has a live
+`DGXMonarchLoraLoader` successor performs setup and the driver footprint check,
+then defers its weight load until the full request reaches sampling. Loading
+the empty base eagerly would remove an already correct resident blend whenever
+a readiness dependency invalidates the loader between queues. The graph grants
+no LoRA credit and predicts no arguments: the unchanged sample-time all-rank
+capacity agreement and model store decide reuse on the exact complete key;
+changed stacks still take the existing swap/bake price. No eager success is
+recorded without a load. Missing node identity, an opaque transform or a dead
+LoRA branch keeps the existing eager path. Public inputs and capacity formulas
+are unchanged.
+
 **A deferred load meets the driver's models.** An explicit preset loads at the
 loader node, before ComfyUI builds the text encoders, the VAEs and the encodes,
 so its load window charges the DiT alone. Under `auto` the loader defers the
