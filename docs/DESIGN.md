@@ -1686,6 +1686,18 @@ coexist. The settled window covers weights at 1.0x plus the driver models and
 other memory the graph still needs to allocate. Slab removes the host copy
 and its transient peak; it does not reduce the settled graph requirement.
 
+**A completed reference encode is not still pending.** A driver readiness
+boundary can record actual H3 reference conditioning and AV latent after its
+driver offload and soft worker trim succeed. Loader pricing credits only that
+completed reference-encode transient when every live video-reference node is
+proved. Evidence binds the backend prompt object, prompt id/list index, graph
+classes/inputs and official source manifest; a reused id, another queue,
+changed reference/source or recycle cannot inherit it. No prompt completion
+flag is accepted. Missing, invalid or evicted proof keeps the cold reservation.
+Encoder/VAE/model charges, render activation and host floors, subsequent runtime
+reference-row checks and both-rank admission stay unchanged. This optional
+in-process integration is not a measured lower calibration for cold encoding.
+
 **A deferred load meets the driver's models.** An explicit preset loads at the
 loader node, before ComfyUI builds the text encoders, the VAEs and the encodes,
 so its load window charges the DiT alone. Under `auto` the loader defers the

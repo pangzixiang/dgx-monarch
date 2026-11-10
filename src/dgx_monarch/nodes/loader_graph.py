@@ -196,6 +196,7 @@ class DriverStackTerms:
     # This text reaches class C refusals when headless calls omit ``prompt``.
     # Keep it nonempty so the activation clause remains actionable.
     activation_note: str = "no graph available at the loader node"
+    ref_encode_note: str = ""
 
     @property
     def total(self) -> int:
