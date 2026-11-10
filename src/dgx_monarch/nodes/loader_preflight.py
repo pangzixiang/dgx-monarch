@@ -33,7 +33,7 @@ from .. import (
 from ..adapters.base import UnsupportedModelError
 from ..log import get_logger
 from ..refusal import PanelAction, RefusalClass, refusal
-from . import consent_projection, consent_rescue, graph_load_price, h3_reference_completion, old_model_clear
+from . import consent_projection, consent_rescue, graph_load_price, old_model_clear
 from .graph_load_price import WINDOW_SETTLED, WINDOW_TRANSIENT, fits_box, loader_refusal
 from .loader_graph import (
     DriverStackTerms,
@@ -99,7 +99,6 @@ def reset_memos() -> None:
     """Drop every residency memo; `_UNPRICED_STACK_WARNED` is not one (see its comment)."""
     clear_memos(_CLEARED_UNETS)
     reset_charged_artifacts()
-    h3_reference_completion.clear()
     consent_projection.reset_grant_audit()
 
 
@@ -327,7 +326,7 @@ def _lead(binding: driver_footprint.DriverFootprintEstimate, window: str, shape:
 
     def stack_for(graph: object) -> DriverStackTerms:
         return graph_load_price.site_terms(driver_stack_terms(
-            graph, family=family, sp_degree=activation_sp_degree(mesh, family)), site, prompt=graph)
+            graph, family=family, sp_degree=activation_sp_degree(mesh, family)), site)
 
     lead = graph_load_price.plain_lead(
         binding, window=window, unet_name=unet_name, deferred=deferred,
@@ -393,7 +392,7 @@ def preflight_loader_footprint(
 
         terms = graph_load_price.site_terms(driver_stack_terms(
             prompt, family=family,
-            sp_degree=activation_sp_degree(mesh, family)), site, prompt=prompt)
+            sp_degree=activation_sp_degree(mesh, family)), site)
         if not terms.resolved and _first_unpriced_stack_warn(family):
             # A direct node call carries no hidden prompt, so the estimator priced
             # only the weights. Say so once per family, so a post-mortem does
