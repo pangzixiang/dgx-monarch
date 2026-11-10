@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .. import attention_pins, fp8_compute, lora_quant_guard, residency_mode
+from .. import attention_pins, fp8_compute, lora_quant_guard, residency_mode, resident_slots
 from ..compile_policy import compile_dit_blocks_slab, compile_dit_is_known_noop
 from ..constants import TRANSITION_LOAD
 from ..transfer_utils import raise_with_distinct_cause, reconcile_error
@@ -107,7 +107,7 @@ def fresh_load(
     slab_handoff = load_ownership.slab_handoff
     base = active = None
     stored = None
-    slot_attr = "uncond" if slot == "uncond" else "current"
+    slot_attr = resident_slots.attribute(slot)
     store._drop_failed.add(slot)
     try:
         store_detect.pin_fsdp_checkpoint(

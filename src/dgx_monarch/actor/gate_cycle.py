@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import socket
 
+from .. import resident_slots
 from . import store_fsdp
 
 
 def run(worker, unet_name: str, options: dict | None = None,
         lora_stack: list | None = None,
-        expected_artifact_identity: dict | None = None) -> dict:
+        expected_artifact_identity: dict | None = None, slot: str = "cond") -> dict:
     """Leave weights swap-produced without ever crossing artifact identities."""
     if worker._setup_key is None:
         raise RuntimeError("gate_swap_cycle before setup(): the Init node must run first")
@@ -29,10 +30,10 @@ def run(worker, unet_name: str, options: dict | None = None,
     def ensure(stack) -> str:
         assert_current()
         _, transition = store_fsdp.ensure(
-            worker, unet_name, options, stack, slot="cond",
+            worker, unet_name, options, stack, slot=slot,
             on_base_loaded=worker._inject_for_topology)
         if expected_artifact_identity is not None:
-            resident = worker.store.current
+            resident = resident_slots.held(worker.store, slot)
             if (resident is None
                     or resident.artifact_identity != expected_artifact_identity):
                 raise ArtifactBindingError(
@@ -42,7 +43,7 @@ def run(worker, unet_name: str, options: dict | None = None,
         return transition
 
     def residency() -> dict:
-        resident = worker.store.current
+        resident = resident_slots.held(worker.store, slot)
         slab = getattr(resident, "slab", None)
         certificate = getattr(slab, "certificate", None) if slab is not None else None
         return {

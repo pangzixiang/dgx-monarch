@@ -95,7 +95,9 @@ def accuracy_waiver_stamps() -> list[dict]:
 
 def assert_resident_artifact_identity(worker, slot: str, expected: dict) -> None:
     """Bind the model adopted by ModelStore to the preflight/grant identity."""
-    resident = worker.store.uncond if slot == "uncond" else worker.store.current
+    from ..resident_slots import held
+
+    resident = held(worker.store, slot)
     if resident is None or resident.artifact_identity != expected:
         from ..mesh_safety import ArtifactBindingError
 

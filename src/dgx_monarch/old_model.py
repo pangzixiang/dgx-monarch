@@ -1,13 +1,9 @@
 """The "Old model in the way" refusal: a model loaded earlier blocks this one.
 
-Both capacity prices that see a Worker's resident take it as still held
-(docs/DESIGN.md section 5.9): the cross-rank agreement's quote and the loader
-preflight on the driver host, where the head's actor shares the box. The one
-exception is the slot's own stock resident a swap replaces, which the store
-drops before the load and the quote credits; a clear is then weighed against
-the uncredited price, because a cleared box holds no copy to drop. A LoRA change
-on the held file is the same credit (``changes_in_place``). A clear of
-the attached mesh, the same teardown as Reset attached mesh, returns all of it.
+Cross-rank and driver-host prices take residents as held (DESIGN section 5.9).
+The exception is a slot's own stock resident replaced by a swap: the quote
+credits its drop, so a fleet clear is weighed against the uncredited price.
+``changes_in_place`` applies the same credit to a LoRA change on the held file.
 This module decides whether a clear would make room and writes the plain
 sentences such a refusal carries, naming each box by ``box_names.py``'s rule
 ("the head", "the sibling"). ``nodes/old_model_clear.py`` owns the card, the
@@ -15,13 +11,10 @@ clear and the Always flow.
 
 A clear would make room on a short box when its shortfall is smaller than what
 the clear gives back there: the file bytes of every stock resident, whose GPU
-copy an in-process drop was measured to return (2026-11-04), or for a load cast
-to another weight dtype the copy the cast built (a 26.6 GiB bf16-cast DiT's drop
-raised the head from 58.7 to 88.5 GiB on 2026-11-05),
-plus the actor's arena above a fresh actor's floor
-(``actor/actor_footprint.py``). A slab or comfy-managed resident and an FSDP
-shard are credited the arena only. Pure: no ComfyUI, no mesh call and no file
-read.
+copy an in-process drop returned (2026-11-04), or a dtype-cast copy (26.6 GiB
+bf16 DiT, head 58.7 to 88.5 GiB after drop, 2026-11-05), plus the arena above
+the fresh-actor floor (``actor/actor_footprint.py``). Slab, comfy-managed and
+FSDP residents credit only the arena. Pure: no ComfyUI, mesh call or file read.
 """
 from __future__ import annotations
 
@@ -296,6 +289,11 @@ def credited_sentence(where_: str, unet_name: str, quote: RankPrice, needed: flo
             f"available, {short} GiB short.")
 
 
+def requires_refiner_residency(quotes: Sequence[RankPrice]) -> bool:
+    """An automatic fleet reset cannot satisfy the independent-refiner contract."""
+    return any(quote.slot == "refiner" or "refiner" in quote.holds_resident for quote in quotes)
+
+
 def fleet_offer(short: Sequence[tuple[RankAnswer, RankPrice]],
                 answers: Sequence[RankAnswer], unet_name: str,
                 keep: frozenset[str] = frozenset()) -> ClearOffer | None:
@@ -307,6 +305,8 @@ def fleet_offer(short: Sequence[tuple[RankAnswer, RankPrice]],
     and keeps its worst row; ranks that share a box add their gains. ``keep``
     names the models this request and graph load (``kept_slots``).
     """
+    if any(requires_refiner_residency(answer.quotes) for answer in answers):
+        return None
     ranks: dict[int, tuple[str, tuple[str, ...], int, int, int, tuple[str, ...], int]] = {}
     for answer, quote in short:
         kept = kept_slots(answer.quotes or (quote,), keep)

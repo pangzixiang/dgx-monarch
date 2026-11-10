@@ -111,6 +111,7 @@ def establish(model, model_request: dict, request: dict, artifact_binding: dict,
             dict(model_request.get("options") or {}),
             [dict(entry) for entry in model_request.get("loras") or []],
             ceremony_identity, timeout_s=1800,
+            **({"slot": "refiner"} if model_request.get("slot") == "refiner" else {}),
             **mesh_setup.token_kwargs(token))
 
     cycle, complete, conclusive, reasons, active, any_active, family = state(raw_cycle)

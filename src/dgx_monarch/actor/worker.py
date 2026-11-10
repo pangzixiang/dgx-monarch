@@ -50,6 +50,7 @@ from .failure import cleanup_on_failure
 from .gate_fsdp_cycle import FsdpGateCycleMixin
 from .model_store import ModelStore, request_artifact_identity
 from .rdma_handoff import RDMAHandoffMixin
+from .refiner import RefinerMixin
 from .sampling import (
     equalize_cond_lengths,
     model_sampling_render_clone,
@@ -64,7 +65,7 @@ from .worker_status import _latent_signature
 log = get_logger(__name__)
 
 
-class GPUWorker(RDMAHandoffMixin, FsdpGateCycleMixin, CancellableSampleMixin, VaeDecodeMixin, Actor):
+class GPUWorker(RefinerMixin, RDMAHandoffMixin, FsdpGateCycleMixin, CancellableSampleMixin, VaeDecodeMixin, Actor):
     def __init__(self) -> None:
         self.store = ModelStore()
         self.rank: int | None = None
@@ -272,11 +273,11 @@ class GPUWorker(RDMAHandoffMixin, FsdpGateCycleMixin, CancellableSampleMixin, Va
 
     @cleanup_on_failure
     def _load_model_impl(self, unet_name: str, options: dict | None = None,
-                         lora_stack: list | None = None) -> dict:
+                         lora_stack: list | None = None, slot: str = "cond") -> dict:
         if self._setup_key is None:
             raise RuntimeError("load_model before setup(): the Init node must run first")
         _, transition = store_fsdp.ensure(
-            self, unet_name, options, lora_stack, slot="cond", on_base_loaded=self._inject_for_topology)
+            self, unet_name, options, lora_stack, slot=slot, on_base_loaded=self._inject_for_topology)
         return {
             "host": socket.gethostname(),
             "rank": self.rank,
@@ -297,34 +298,25 @@ class GPUWorker(RDMAHandoffMixin, FsdpGateCycleMixin, CancellableSampleMixin, Va
                                 lora_stack: list | None = None) -> dict:
         if self._setup_key is None:
             raise RuntimeError("load_uncond_model before setup(): the Init node must run first")
-        _, transition = store_fsdp.ensure(
-            self, unet_name, options, lora_stack, slot="uncond",
-            on_base_loaded=self._inject_for_topology)
-        return {
-            "host": socket.gethostname(),
-            "rank": self.rank,
-            "transition": transition,
-            "artifact_sets": [request_artifact_identity(unet_name, lora_stack)],
-            **self.store.snapshot(),
-        }
+        return self._load_model_impl(unet_name, options, lora_stack, "uncond")
 
     @concurrent_endpoint
     async def gate_swap_cycle(self, unet_name: str, options: dict | None = None,
                               lora_stack: list | None = None,
-                              expected_artifact_identity: dict | None = None) -> dict:
+                              expected_artifact_identity: dict | None = None, slot: str = "cond") -> dict:
         weight_dtype_from_options(options)
         async with self._gpu_lock:
             return await self._on_gpu(
                 self._gate_swap_cycle_impl, unet_name, options, lora_stack,
-                expected_artifact_identity)
+                expected_artifact_identity, slot)
 
     @cleanup_on_failure
     def _gate_swap_cycle_impl(self, unet_name: str, options: dict | None = None,
                               lora_stack: list | None = None,
-                              expected_artifact_identity: dict | None = None) -> dict:
+                              expected_artifact_identity: dict | None = None, slot: str = "cond") -> dict:
         from .gate_cycle import run
 
-        return run(self, unet_name, options, lora_stack, expected_artifact_identity)
+        return run(self, unet_name, options, lora_stack, expected_artifact_identity, slot)
 
     @concurrent_endpoint
     async def unload(self) -> dict:
@@ -345,15 +337,18 @@ class GPUWorker(RDMAHandoffMixin, FsdpGateCycleMixin, CancellableSampleMixin, Va
         # The seams are read here, from this module's globals, at every call,
         # so a patch on actor.worker reaches the body that lives in
         # sample_protocol.py. Passing them as bare names is what keeps that true.
-        return sample_protocol.run_sample(
-            self, request, progress_port, cancel_event,
-            equalize_cond_lengths=equalize_cond_lengths,
-            model_sampling_render_clone=model_sampling_render_clone,
-            request_artifact_identity=request_artifact_identity,
-            run_ksampler=run_ksampler,
-            run_custom=run_custom,
-            latent_signature=_latent_signature,
-        )
+        from .resident_protection import peers
+
+        with peers(getattr(self, "store", None), request.get("model", {}).get("slot", "cond")):
+            return sample_protocol.run_sample(
+                self, request, progress_port, cancel_event,
+                equalize_cond_lengths=equalize_cond_lengths,
+                model_sampling_render_clone=model_sampling_render_clone,
+                request_artifact_identity=request_artifact_identity,
+                run_ksampler=run_ksampler,
+                run_custom=run_custom,
+                latent_signature=_latent_signature,
+            )
 
     @concurrent_endpoint
     async def compute_sigmas(self, model_spec: dict, scheduler: str, steps: int, denoise: float = 1.0):
@@ -395,9 +390,14 @@ class GPUWorker(RDMAHandoffMixin, FsdpGateCycleMixin, CancellableSampleMixin, Va
             return torch.FloatTensor([])
         model_sampling = normalize_model_sampling(model_spec.get("model_sampling"))
 
-        patcher, _ = store_fsdp.ensure(
-            self, model_spec["unet_name"], model_spec.get("options"),
-            model_spec.get("loras"), slot="cond", on_base_loaded=self._inject_for_topology)
+        if model_spec.get("slot") == "refiner":
+            patcher, _ = store_fsdp.ensure(
+                self, model_spec["unet_name"], model_spec.get("options"),
+                model_spec.get("loras"), slot="refiner", on_base_loaded=self._inject_for_topology)
+        else:
+            patcher, _ = store_fsdp.ensure(
+                self, model_spec["unet_name"], model_spec.get("options"),
+                model_spec.get("loras"), slot="cond", on_base_loaded=self._inject_for_topology)
 
         total_steps = int(steps)
         if denoise < 1.0:

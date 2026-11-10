@@ -378,6 +378,7 @@
       "test_every_short_box_must_gain_room_and_every_old_model_is_named": "3ddd00f55ff068fa",
       "test_no_attached_mesh_means_nothing_to_clear": "18853483003e3cef",
       "test_no_card_means_the_remedy_names_only_the_reset": "66029435b79b1a99",
+      "test_resident_refiner_shortfall_cannot_offer_fleet_clear": "367a7a3cb28f3b74",
       "test_settled_is_two_close_readings_or_the_deadline": "522fe97827328c8d",
       "test_the_agreement_binds_its_card_to_the_fleet_that_refused": "060e45f0db131d8e",
       "test_the_always_flag_sits_beside_auto_rescue_and_an_older_memo_still_reads": "64f09128f8626aae",

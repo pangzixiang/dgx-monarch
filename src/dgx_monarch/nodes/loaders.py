@@ -334,6 +334,13 @@ class DGXMonarchUNETLoader:
         return (spec,)
 
 
+class DGXMonarchRefinerUNETLoader(DGXMonarchUNETLoader):
+    """Keep a finishing model independent of the primary and CFG-negative slots."""
+
+    SLOT = "refiner"
+    ENDPOINT = "load_refiner_model"
+
+
 class DGXMonarchUncondUNETLoader(DGXMonarchUNETLoader):
     """Second model slot for dual-model asymmetric CFG (Ideogram4)."""
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from .. import residency_mode, upstream_gate
 from ..refusal import RefusalClass, refusal
 from ..residency_mode import ComfyManagedResidencyError
+from . import resident_protection
 
 
 def active(worker) -> bool:
@@ -77,11 +78,15 @@ def ensure(worker, *args, **kwargs):
     model. Rescue consent identifies the sample dispatch; other load paths
     disarm waivers so grants cannot survive thread reuse.
     """
+    if kwargs.get("slot", "cond") == "refiner":
+        from ..resident_slots import validate_refiner_topology
+
+        validate_refiner_topology(getattr(worker, "topology", {}))
     _assert_artifact_runnable(args, kwargs)
     from .. import accuracy_waiver
 
     _assert_comfy_managed_supported(worker, args, kwargs)
-    if kwargs.get("slot", "cond") == "cond":
+    if kwargs.get("slot", "cond") != "uncond":
         accuracy_waiver.bind_model(
             args[0] if args else kwargs.get("unet_name", ""),
             args[1] if len(args) > 1 else kwargs.get("options"),
@@ -90,7 +95,8 @@ def ensure(worker, *args, **kwargs):
             dispatch="rescue_consent" in kwargs)
     if active(worker):
         kwargs["fsdp_launch"] = True
-    return worker.store.ensure(*args, **kwargs)
+    with resident_protection.peers(worker.store, kwargs.get("slot", "cond")):
+        return worker.store.ensure(*args, **kwargs)
 
 
 def validate_injection(

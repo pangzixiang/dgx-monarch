@@ -435,7 +435,10 @@ def copies_off_the_gpu(store, stored, slot: str, active) -> tuple[int, int]:
 
     patches = getattr(active, "patches", None)
     backup = getattr(stored.base_patcher, "backup", None)
-    other = store._stored("cond" if slot == "uncond" else "uncond")
+    from .. import resident_slots
+
+    other = next((store._stored(name) for name in resident_slots.ATTRIBUTES
+                  if name != slot and store._stored(name) is not None), None)
     if (not isinstance(patches, dict) or not isinstance(backup, dict) or other is not None
             or store_residency.describe(stored)["residency"] != "stock"
             or getattr(stored.base_patcher, "_dgxm_fsdp", False)

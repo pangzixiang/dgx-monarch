@@ -451,6 +451,8 @@ def _submit_render_guarded(
     # The collector notes the sampler wall under this render's token, so a
     # pipelined render in flight beside it cannot publish the wall as its own.
     finish_render = partial(_finish_render, telemetry_token=guard.telemetry_token)
+    if getattr(model, "slot", "cond") == "refiner":
+        finish_render = partial(finish_render, expected_primary_slot="refiner")
     if adoption_context is not None:
         if (
             expected_adoption_context_sha256 is None
