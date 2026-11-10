@@ -64,6 +64,14 @@ def test_cold_graph_and_a_completion_boolean_keep_the_entire_price():
     assert graph_load_price.site_terms(terms(), "loader", prompt=prompt).ref_bytes == 40*GIB
 
 
+def test_a_cold_price_never_needs_runtime_or_source_probes(monkeypatch):
+    def unexpected():
+        pytest.fail("cold graph probed a runtime without any completion proof")
+    monkeypatch.setattr(completion, "_context", unexpected)
+    monkeypatch.setattr(completion, "_source", unexpected)
+    assert completion.credit(terms(), graph()).ref_bytes == 40*GIB
+
+
 def test_only_this_completed_transient_is_credited_and_every_other_term_survives(isolation):
     prompt, before = graph(), terms()
     assert record(prompt)

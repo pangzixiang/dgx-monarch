@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import threading
 from collections.abc import Mapping
 from dataclasses import replace
@@ -36,9 +37,10 @@ def clear() -> None:
 
 def _context() -> tuple[str, str, int | None] | None:
     try:
-        from comfy_execution.utils import get_executing_context
-
-        ctx = get_executing_context()
+        utility = sys.modules.get("comfy_execution.utils")
+        if utility is None:
+            return None  # a headless price must not import a Comfy runtime
+        ctx = utility.get_executing_context()
         if (not isinstance(ctx.prompt_id, str) or not ctx.prompt_id
                 or not isinstance(ctx.node_id, str) or not ctx.node_id
                 or ctx.list_index not in (None, 0)):
@@ -161,6 +163,9 @@ def credit(terms: DriverStackTerms, prompt: object) -> DriverStackTerms:
     """Remove only the completed encode transient; preserve every other term."""
     if not terms.ref_bytes or not isinstance(prompt, Mapping):
         return terms
+    with _LOCK:
+        if not _COMPLETED:
+            return terms
     try:
         key, needed = _key(prompt), _needed(prompt)
         if key is None or not needed:
