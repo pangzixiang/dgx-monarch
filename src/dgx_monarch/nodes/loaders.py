@@ -1,8 +1,7 @@
 """Loader nodes: describe what should be resident on the workers.
 
 DiT weights never enter the driver process. With an explicit topology the base
-model loads eagerly at node execution, except a dm-cfg2 slot or a live native
-LoRA successor, which defer the weight load to
+model loads eagerly at node execution, except a dm-cfg2 slot, which defers to
 the sample path; with `auto` the load happens on the first render (topology
 must exist before load so USP injection binds at load). LoRA nodes only extend
 the request signature. The model store (DESIGN.md section 5.5) turns a LoRA
@@ -31,7 +30,6 @@ from ..safetensors_header import SafetensorsFileIdentity
 from ..topology import Topology, topology_from_preset
 from . import consent_projection, loader_graph, loader_preflight, old_model_clear, render_validation
 from .common import MeshSpec, ModelSpec
-from .loader_lora import has_live_lora_successor
 from .refusal_lead import lead_with_refusal
 
 log = get_logger(__name__)
@@ -255,22 +253,18 @@ class DGXMonarchUNETLoader:
             from .render_session import mutation_render_session
 
             def defers(handle, topo) -> bool:
-                # Setup stays eager. A dm-cfg2 slot loads once per owning rank
-                # at sampling; a LoRA successor completes the request there.
-                # Loading the empty base here would strip an already correct
-                # resident blend on each readiness-barrier invalidation.
-                # No call_all result exists to certify on either deferred path.
+                # Setup stays eager (topology is known), but a dm-cfg2 load
+                # defers to the first render so the sample path loads one
+                # checkpoint per rank. record_rescue_row is skipped with the
+                # load, mirroring the auto path (no call_all results to certify).
                 render_preflight.preflight_sol_sequence_parallel(topo, mesh.attention)
-                dual_model = self._defers_for_dual_model_cfg2(mesh, unet_name, topo)
-                lora_graph = has_live_lora_successor(prompt, unique_id, unet_name)
-                if not (dual_model or lora_graph):
+                if not self._defers_for_dual_model_cfg2(mesh, unet_name, topo):
                     return False
                 with mutation_render_session(handle):
                     mesh_setup.ensure_request_setup(
                         handle, topo, mesh.attention, mesh.sync_ulysses,
                         mesh.worker_args)
-                first_render.load_deferred(self.ENDPOINT, reason=(
-                    "explicit cfg2 dm-cfg2" if dual_model else "live native LoRA stack"))
+                first_render.load_deferred(self.ENDPOINT, reason="explicit cfg2 dm-cfg2")
                 return True
 
             if defers(handle, topo):

@@ -2,16 +2,6 @@
 
 ## [Unreleased]
 
-- Credit a completed H3 reference-encoding transient at a trusted readiness
-  boundary, scoped to the exact backend prompt object, input graph and source
-  manifest. Keep the cold reference reservation without completion evidence;
-  preserve model charges, activation/host floors and per-rank admission.
-
-- Defer an explicit loader's weight load when its live graph applies a native
-  LoRA transform. Setup and footprint checks remain; sampling admits the complete
-  request on both ranks. A readiness barrier can then rerun the loader without
-  stripping the same resident LoRA stack back to the empty base each queue.
-
 - Add an independent resident-refiner model slot and loader. Preserve peer
   slots through ComfyUI memory reclamation, route sampling and capacity evidence
   to the selected slot, and retain the low-RSS slab relocation fix.
