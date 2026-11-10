@@ -21,7 +21,7 @@ from ..transfer_utils import (
     safe_call,
     safe_note,
 )
-from . import slab_lifetime, store_identity
+from . import slab_lifetime, store_identity, store_slab_finish
 
 log = get_logger(__name__)
 
@@ -317,6 +317,9 @@ def lazy_swap_transition(
         t_build = time.perf_counter() - t1
         t1 = time.perf_counter()
         record = store._lazy_swap(stored, active, unet_name)
+        if stored.slab is not None:
+            store_slab_finish.reabsorb_and_trim(
+                stored.base_patcher, stored.slab, logger, phase="lazy-swap")
         t_swap = time.perf_counter() - t1
         store_identity.assert_stable_identity(
             request_artifact_identity(unet_name, lora_stack), requested_identity,
