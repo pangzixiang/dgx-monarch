@@ -22,15 +22,7 @@ _CONFIG_PERMISSION_ACTION = "tighten_config_permissions"
 
 
 class RepairError(RuntimeError):
-    """A repair could not be proven safe or complete.
-
-    ``applied`` is True once the mode change itself returned: the file may
-    already be private, so the receipt must not say nothing changed.
-    """
-
-    def __init__(self, code: str, *, applied: bool = False) -> None:
-        super().__init__(code)
-        self.applied = applied
+    """A repair could not be proven safe or complete."""
 
 
 @dataclass(frozen=True)
@@ -148,25 +140,14 @@ def apply_config_permission_repair(
         if digest.hexdigest() != plan.config_sha256:
             raise RepairError("config_changed_since_inspection")
         os.fchmod(fd, _PRIVATE_FILE_MODE)
-    except OSError as exc:
-        os.close(fd)
-        raise RepairError("config_permissions_write_failed") from exc
-    except BaseException:
-        os.close(fd)
-        raise
-    # fchmod returned. A readback that shows the prior mode saw the change not
-    # stick; any other failure leaves it applied but unconfirmed.
-    try:
         os.fsync(fd)
         after = os.fstat(fd)
         if (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
-            raise RepairError("config_permissions_unconfirmed", applied=True)
-        if stat.S_IMODE(after.st_mode) == plan.previous_mode:
-            raise RepairError("config_permissions_not_applied")
+            raise RepairError("config_inode_changed_during_repair")
         if stat.S_IMODE(after.st_mode) != _PRIVATE_FILE_MODE:
-            raise RepairError("config_permissions_unconfirmed", applied=True)
+            raise RepairError("config_permissions_not_confirmed")
     except OSError as exc:
-        raise RepairError("config_permissions_unconfirmed", applied=True) from exc
+        raise RepairError("config_permissions_write_failed") from exc
     finally:
         os.close(fd)
     return PermissionRepair(
@@ -249,26 +230,15 @@ def run_config_permission_repair(
         print(f"safe repair stopped: {error}", file=output)
         return False, destination
     except RepairError as exc:
-        if exc.applied:
-            # fchmod returned, so the mode most likely changed; only its proof failed.
-            receipt.add_step("tighten_config_permissions", "unknown",
-                             counts={"changed": 1}, notes=(str(exc),))
-            final = receipt.finish("partial", notes=(
-                f"The mode change to 0600 ran but was not confirmed; prior mode was "
-                f"{plan.previous_mode:04o}. Run doctor --repair again to inspect it.",))
-            message = (f"safe repair unconfirmed: {exc}; the mode change ran but could not be "
-                       "confirmed, so run `dgxm doctor --repair` again to inspect it")
-        else:
-            receipt.add_step(
-                "tighten_config_permissions", "failed", counts={"changed": 0}, notes=(str(exc),)
-            )
-            final = receipt.finish("failed", notes=("The safe repair was not applied.",))
-            message = f"safe repair stopped: {exc}"
+        receipt.add_step(
+            "tighten_config_permissions", "failed", counts={"changed": 0}, notes=(str(exc),)
+        )
+        final = receipt.finish("failed", notes=("The safe repair was not applied.",))
         try:
             destination = write_receipt(final, receipt_path)
         except (OSError, ValueError):
             destination = None
-        print(message, file=output)
+        print(f"safe repair stopped: {exc}", file=output)
         return False, destination
 
     receipt.add_step(

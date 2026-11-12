@@ -12,7 +12,6 @@ import sys
 from typing import Any, NoReturn
 
 from ..transfer_utils import raise_with_distinct_cause, reconcile_error, safe_call
-from ..worker_runtime import WorkerRuntimeMismatch
 from . import gate_process_state as _state
 from .gate_capacity_stop import CeremonyCapacityStop
 from .gate_fsdp import (
@@ -34,7 +33,6 @@ from .gate_process_verdicts import (  # noqa: F401 - published from here
     process_gate_verdict_locked,
     record_process_gate_verdicts,
 )
-from .gate_proof_request import AUTO_GATED_KINDS, proof_request
 from .render_validation import PACKED_TOPOLOGY_REFUSALS
 
 # read-only after import: one reason per automatic-FSDP denial source
@@ -74,11 +72,10 @@ def auto_gate_context(
     request_kind: str,
     latent: dict | None = None,
     cfg_value: float | None = None,
-    uncond_model: dict | None = None,
 ) -> tuple[str, tuple[str, ...]] | None:
     if getattr(model.mesh, "auto_gate", "off") != "first_use":
         return None
-    if request_kind not in AUTO_GATED_KINDS:
+    if request_kind not in ("ksampler", "ksampler_advanced"):
         return None
     from ..gate_ledger import GateLedger, comfy_commit
     from .common import (
@@ -92,7 +89,6 @@ def auto_gate_context(
     )
     from .gate import (
         _combo_of,
-        _dual_combo_of,
         _effective_worker_args,
         _ledger_dir,
         gate_capability_context,
@@ -120,12 +116,7 @@ def auto_gate_context(
         resolved_topology = topology_from_preset(
             model.mesh.topology_preset, int(handle.world))
         resolved_attention = resolve_sample_attention(model.mesh.attention, False)
-    from .gate_dual import skip_reason
-
-    if uncond_model is not None and skip_reason(resolved_topology, effective) is not None:
-        return None  # authorization answers it: stock, or the FSDP refusal
-    stacked = bool(model.loras or (uncond_model or {}).get("loras"))
-    lora_risk = stacked and effective.get("lora_low_rss") is not False
+    lora_risk = bool(model.loras) and effective.get("lora_low_rss") is not False
     # Omitted slab_weights means worker-side auto and remains risky.
     slab_risk = effective.get("slab_weights") is not False
     # comfy_managed forces lora_low_rss and slab_weights off, so without this
@@ -151,8 +142,7 @@ def auto_gate_context(
         log.info("identity gate not run for %s: %s", model.unet_name, skip)
         return None
     try:
-        key, artifacts = (_combo_of(model) if uncond_model is None
-                          else _dual_combo_of(model, uncond_model))
+        key, artifacts = _combo_of(model)
         commit = comfy_commit()
         capability_context = gate_capability_context(
             model,
@@ -194,12 +184,12 @@ def auto_gate_context(
                     "identity gate previously FAILED for %s; no ceremony runs, and "
                     "its dispatch renders with the guarded residency levers off for "
                     "that combination in this capability context",
-                    combination_label(model, uncond_model),
+                    combination_label(model),
                 )
         return state, gate_verdict_token(
             key, artifacts.current, commit, capability_context)
-    except (FsdpGateProofError, WorkerRuntimeMismatch):
-        raise  # two torch builds hold no Gate authority; the user sees which (worker_runtime.py)
+    except FsdpGateProofError:
+        raise
     except Exception as exc:
         if fsdp_proof_required:
             raise FsdpGateProofError(
@@ -213,7 +203,6 @@ def auto_gate_required(
     request_kind: str = "ksampler",
     latent: dict | None = None,
     cfg_value: float | None = None,
-    uncond_model: dict | None = None,
 ) -> bool:
     """Whether a normal render must remain sequential for first-use gating."""
     from .common import (
@@ -227,10 +216,10 @@ def auto_gate_required(
     if getattr(_state._AUTO_GATE_ACTIVE, "on", False):
         return False
     try:
-        context = _auto_gate_context(model, request_kind, latent, cfg_value,
-                                     *(() if uncond_model is None else (uncond_model,)))
-    except (FsdpGateProofError, WorkerRuntimeMismatch):
-        raise  # two torch builds hold no Gate authority; the user sees which (worker_runtime.py)
+        context = _auto_gate_context(
+            model, request_kind, latent, cfg_value)
+    except FsdpGateProofError:
+        raise
     except PACKED_TOPOLOGY_REFUSALS:
         raise
     except Exception as exc:
@@ -301,15 +290,15 @@ def maybe_auto_gate(
     del steps_hint  # request steps are the canonical source below
     if getattr(_state._AUTO_GATE_ACTIVE, "on", False):
         return None
-    uncond = request.get("uncond_model")
-    dual = () if uncond is None else (uncond,)  # a dual render proves both slots
+    if request.get("uncond_model") is not None:
+        return "DUAL_MODEL_STOCK"
     claimed_token: tuple[str, ...] | None = None
     fsdp_proof_required = fsdp_resolved = False
     try:
         context = _auto_gate_context(
-            model, request.get("kind", ""), latent, cfg_value, *dual)
+            model, request.get("kind", ""), latent, cfg_value)
         if context is None:
-            return "DUAL_MODEL_STOCK" if dual else None
+            return None
         state, token = context
         fsdp_proof_required, fsdp_resolved = token_requires_fsdp_proof(token), token_resolves_fsdp(token)
         process_verdict = _process_gate_verdict(token)
@@ -349,10 +338,15 @@ def maybe_auto_gate(
         from ..gate_runtime import torch_change
         from .gate import _ledger_dir, run_identity_ceremony
 
-        built = proof_request(request)
-        if built is None:  # a one-sigma schedule renders nothing to compare
-            return None
-        light, light_steps = built
+        light = dict(request)
+        light["steps"] = min(2, int(request.get("steps") or 2))
+        light["advanced"] = {
+            "add_noise": True,
+            "start_at_step": 0,
+            "end_at_step": None,
+            "return_with_leftover_noise": False,
+        }
+        light["kind"] = "ksampler_advanced"
         gate_was_active = getattr(_state._AUTO_GATE_ACTIVE, "on", False)
         ceremony_result: dict | None = None
         fsdp_return_guard: dict[str, Any] = {}
@@ -365,7 +359,7 @@ def maybe_auto_gate(
                 light,
                 dict(latent),
                 float(1.0 if cfg_value is None else cfg_value),
-                light_steps,
+                light["steps"],
                 origin="auto_first_use",
                 _fsdp_return_guard=fsdp_return_guard,
             )
@@ -375,7 +369,7 @@ def maybe_auto_gate(
             if result["verdict"] == "PASS":
                 actual_token = tuple(result.get("_gate_token") or ())
                 current: Any = _auto_gate_context(
-                    model, light["kind"], latent, cfg_value, *dual)
+                    model, light["kind"], latent, cfg_value)
                 token_matches = (
                     actual_token == token
                     and current is not None
@@ -457,8 +451,8 @@ def maybe_auto_gate(
                 _raise_cleanup_cancellation(
                     active_primary, active_cleanup_error,
                     "auto-gate active-context restoration was interrupted")
-    except (FsdpGateProofError, WorkerRuntimeMismatch):
-        raise  # two torch builds hold no Gate authority; the user sees which (worker_runtime.py)
+    except FsdpGateProofError:
+        raise
     except PACKED_TOPOLOGY_REFUSALS:
         raise
     except CeremonyCapacityStop as stop:
@@ -471,7 +465,7 @@ def maybe_auto_gate(
         safe_call(log.warning,
                   "identity gate skipped for %s, and this render runs on stock "
                   "residency; the next request of this combination meets the "
-                  "same check: %s", combination_label(model, uncond), stop)
+                  "same check: %s", combination_label(model), stop)
         return gate_inconclusive.CAPACITY_STOP_DISPATCH_VERDICT
     except Exception as exc:
         from .consent_waiver import ceremony_abort_reason, settle_aborted_ceremony

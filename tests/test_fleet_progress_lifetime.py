@@ -53,10 +53,8 @@ def receiver_factory(monkeypatch):
 
     def make(*, track_render=True):
         stepped = threading.Event()
-        # Fleet's own construction: one world-one job, one result leader.
         receiver = ProgressReceiver(
-            8, on_step=lambda _message: stepped.set(), track_render=track_render,
-            leaders=1)
+            8, on_step=lambda _message: stepped.set(), track_render=track_render)
         receivers.append(receiver)
         return receiver, stepped
 

@@ -764,7 +764,6 @@ def _refusal(offer_helps: bool = True) -> BaseException:
 
 
 def test_always_clears_once_and_says_so(monkeypatch, caplog):
-    monkeypatch.setattr(old_model_clear.log, "propagate", True)
     handle = _LiveHandle()
     assert old_model_clear.clear_for_retry(handle, _refusal()) is False   # off
     consent_store.set_standing("auto_clear", True)

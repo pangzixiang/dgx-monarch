@@ -10,9 +10,7 @@ from . import store_fsdp
 def run(worker, unet_name: str, options: dict | None = None,
         lora_stack: list | None = None,
         expected_artifact_identity: dict | None = None, slot: str = "cond") -> dict:
-    """Leave swap-produced weights in the exact cond, uncond, or refiner slot."""
-    if slot not in resident_slots.ATTRIBUTES:
-        raise ValueError(f"gate_swap_cycle slot must be cond or uncond for CFG, or refiner for refinement, not {slot!r}")
+    """Leave weights swap-produced without ever crossing artifact identities."""
     if worker._setup_key is None:
         raise RuntimeError("gate_swap_cycle before setup(): the Init node must run first")
 
