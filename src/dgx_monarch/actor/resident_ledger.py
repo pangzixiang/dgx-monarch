@@ -164,7 +164,7 @@ def unload_dropped(mm: Any, stored: Any, other: Any, everything: bool = False,
     if everything or not detaches_alone(stored):
         unload_without_offload(mm, patchers)
         return False
-    kept = []
+    kept: list[Any] = []
     for held in (other, *peers):
         held_patchers = tuple(patcher for patcher in (getattr(held, "base_patcher", None),
                                                     getattr(held, "active_patcher", None))
