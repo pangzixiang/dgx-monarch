@@ -441,8 +441,9 @@ def test_the_render_classes_are_the_nodes_that_call_the_refusal():
         code = getattr(getattr(method, "__wrapped__", method), "__code__", None)
         if code is not None and "refuse_dead_expander" in code.co_names:
             calling.add(class_name)
-    # The two UNET loaders call it too, and render nothing themselves.
-    loaders = {"DGXMonarchUNETLoader", "DGXMonarchUncondUNETLoader"}
+    # The UNET loaders call it before any rendering.
+    loaders = {"DGXMonarchUNETLoader", "DGXMonarchUncondUNETLoader",
+               "DGXMonarchRefinerUNETLoader"}
     assert calling - loaders == set(expander_prompt.RENDER_CLASSES)
     assert loaders <= calling
     # The Fleet sampler renders and cannot call it: it receives no prompt graph. It is

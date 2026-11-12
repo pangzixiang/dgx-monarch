@@ -909,7 +909,7 @@
       "test_the_empty_caption_fallback_does_not_quiet_the_refusal": "13d0b5bdecb83e83",
       "test_the_loader_refuses_before_any_price_heal_or_load": "c59b4bc3850c328f",
       "test_the_refusal_and_every_link_name_the_expander_entry": "eeac6e245931e4fb",
-      "test_the_render_classes_are_the_nodes_that_call_the_refusal": "1d2bf70cd60913a2",
+      "test_the_render_classes_are_the_nodes_that_call_the_refusal": "9cf9180f9abbbc05",
       "test_the_shipped_graph_refuses_nothing": "add2316af0fccd6e",
       "test_the_shipped_texts_with_the_switch_on_refuse_nothing": "20b81bcf5d4e7e5d",
       "test_the_sure_walk_follows_only_what_a_switch_is_certain_to_run": "e653a125b3fea16c",

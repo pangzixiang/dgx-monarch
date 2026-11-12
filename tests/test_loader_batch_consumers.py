@@ -164,7 +164,8 @@ def test_the_walk_knows_every_registered_node_that_hands_on_a_model():
     from dgx_monarch.constants import GUIDER_TYPE, MODEL_TYPE
     from dgx_monarch.nodes import NODE_CLASS_MAPPINGS
 
-    loaders = {"DGXMonarchUNETLoader", "DGXMonarchUncondUNETLoader"}
+    loaders = {"DGXMonarchUNETLoader", "DGXMonarchUncondUNETLoader",
+               "DGXMonarchRefinerUNETLoader"}
     handing_on = {name for name, cls in NODE_CLASS_MAPPINGS.items()
                   if name not in loaders
                   and set(getattr(cls, "RETURN_TYPES", ())) & {MODEL_TYPE, GUIDER_TYPE}}

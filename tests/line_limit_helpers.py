@@ -11,10 +11,12 @@ CEILINGS = {
     # Loader, worker, and Comfy integration seams stay with the state they bind.
     "actor/unbake.py": 692, "config.py": 638, "actor/sampling.py": 620,
     "actor/comfy_bridge.py": 531, "actor/worker.py": 509, "comfy_surface.py": 528,
+    "actor/model_store.py": 501, "actor/store_bake.py": 503, "old_model.py": 504,
     # FSDP and capacity pricing are deliberately centralized for exact accounting.
     "adapters/fsdp.py": 589, "actor/capacity_quote.py": 539,
     "capacity_agreement.py": 567, "gate_ledger.py": 527,
-    "nodes/gate_identity.py": 583, "nodes/loader_preflight.py": 593,
+    "nodes/gate_identity.py": 583, "nodes/loader_preflight.py": 597,
+    "nodes/gate_ceremony.py": 502, "nodes/common.py": 503,
     "runtime_provenance.py": 596, "adapters/flux_family.py": 560,
 }
 

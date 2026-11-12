@@ -1422,7 +1422,7 @@ Node contract stability is workflow stability: **NODE_CLASS_MAPPINGS keys,
 input names, and defaults are semver-governed API.** New inputs are optional or
 hidden and go at the end, because ComfyUI stores widget values by position.
 `tests/test_node_contract.py` snapshots the keys, ordered input names, types
-and defaults (`tests/node_input_contract.json`). Ten of the 21 nodes declare a
+and defaults (`tests/node_input_contract.json`). Eleven of the 22 nodes declare a
 hidden `UNIQUE_ID`; no node reads its value, but it is part of that contract.
 
 ### 5.8 Progress, logging, observability
@@ -3234,9 +3234,8 @@ to that list. A ceiling
 includes no allowance for future additions. Changing the set or a ceiling
 requires a reviewed ledger edit; new behavior should prefer an extracted
 module. An exception is not permission to fold a focused lifecycle, policy,
-validation, or compatibility module back into the listed file. The table below
-mirrors the ledger by hand; no test reads it, and its reasons are context, not
-an enforced requirement. The current exceptions are:
+validation, or compatibility module back into the listed file. Tests verify
+that the table matches the ledger. The current exceptions are:
 
 | module | ceiling | cohesive reason |
 |---|---:|---|
@@ -3248,6 +3247,9 @@ an enforced requirement. The current exceptions are:
 | `config.py` | 638 | typed cluster schema, fabric profiles, validation, and TOML rendering; strict table-key vocabulary lives in `config_schema.py` |
 | `actor/sampling.py` | 620 | worker sampler protocol and distributed execution paths; per-adapter data-parallel exemptions keep raw token/weight sequences intact across ranks |
 | `actor/worker.py` | 509 | ordered checks and adapter installation for each freshly loaded base in `_inject_for_topology` |
+| `actor/model_store.py` | 501 | lifecycle and ownership of the primary, CFG-negative and refiner model slots |
+| `actor/store_bake.py` | 503 | LoRA bake and slab promotion while retaining model ownership and cleanup evidence |
+| `old_model.py` | 504 | resident model replacement policy and the refusal and retry evidence it presents |
 | `actor/comfy_bridge.py` | 531 | Comfy worker bootstrap and narrowly-scoped runtime patching; DynamicVRAM state, latches, and policy live in `actor/comfy_dynamic.py`, the pread shim lives in `pread_backend.py`, and the INT8 GEMM option lives in `kernels/int8_gemm.py`, which bootstrap configures before ComfyUI imports comfy-kitchen |
 | `actor/capacity_quote.py` | 539 | residency memory estimates and the response fields parsed by the driver, including slab LoRA bake memory and default LoRA-path selection |
 | `capacity_agreement.py` | 567 | the driver's collection, its one pure decision function and the fleet card it composes |
@@ -3255,7 +3257,9 @@ an enforced requirement. The current exceptions are:
 | `comfy_surface.py` | 528 | one executable inventory of every stock ComfyUI touchpoint, deliberately flat so a failing canary identifies the changed API |
 | `adapters/fsdp.py` | 589 | the FSDP launch contract in one place: admitted kinds and profiles, the live precision rescan, the wrap with ignored islands and quantized shards, the streaming shard build hand-off, and the shard-build price |
 | `nodes/gate_identity.py` | 583 | canonical normal/Fleet capability construction, proof-scope binding, authorization, and typed denial |
-| `nodes/loader_preflight.py` | 593 | the loader-site capacity answer in one place: the two windows, the residency ladder they are priced against and the slab rescue offer |
+| `nodes/loader_preflight.py` | 597 | the loader-site capacity answer in one place: the two windows, the residency ladder they are priced against and the slab rescue offer |
+| `nodes/gate_ceremony.py` | 502 | Identity Gate orchestration, admission and cleanup of its probe runs |
+| `nodes/common.py` | 503 | shared node utilities for render admission, progress and failure handling |
 | `runtime_provenance.py` | 596 | stdlib-only exact Git/source inventory, loaded-origin validation, and runtime snapshot boundary |
 | `adapters/flux_family.py` | 560 | the flux-family adapters and the sharded forwards they install |
 

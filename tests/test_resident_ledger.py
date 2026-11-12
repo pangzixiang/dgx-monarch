@@ -294,7 +294,12 @@ def test_unload_all_pins_both_slots_before_it_drops_either(rig, monkeypatch):
         resident_ledger, "pin_store_for_unload",
         lambda *slots: order.append(("pin", [slot is not None for slot in slots])))
     drop = store._drop
-    monkeypatch.setattr(store, "_drop", lambda slot, *rest: (order.append(slot), drop(slot, *rest))[1])
+
+    def record_drop(slot, everything=False):
+        order.append(slot)
+        drop(slot, everything=everything)
+
+    monkeypatch.setattr(store, "_drop", record_drop)
 
     store.unload_all()
 
