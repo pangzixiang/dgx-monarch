@@ -26,6 +26,11 @@ def items(store: Any) -> Iterator[tuple[str, Any]]:
             yield slot, value
 
 
+def peers(store: Any, slot: str) -> tuple[Any, ...]:
+    """Return the live residents a single-slot operation leaves in place."""
+    return tuple(value for name, value in items(store) if name != slot and value is not None)
+
+
 def primary(spec: Mapping[str, Any]) -> str:
     slot = spec.get("slot", "cond")
     if slot not in ("cond", "refiner"):

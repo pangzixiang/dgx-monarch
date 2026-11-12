@@ -1,10 +1,10 @@
 """Loader nodes: describe what should be resident on the workers.
 
 DiT weights never enter the driver process. With an explicit topology the base
-model loads eagerly at node execution, except a dm-cfg2 slot or a live native
-LoRA successor, which defer the weight load to
-the sample path; with `auto` the load happens on the first render (topology
-must exist before load so USP injection binds at load). LoRA nodes only extend
+model loads eagerly at node execution except for a dm-cfg2 slot, a live native
+LoRA successor, or a load that the first-use gate would immediately drop.
+Those paths defer placement to the first render. With `auto` the load also
+waits for the first render, when the topology is known. LoRA nodes only extend
 the request signature. The model store (DESIGN.md section 5.5) turns a LoRA
 tweak into a hot-swap, never a reload.
 """
@@ -29,7 +29,15 @@ from ..mesh_safety import ArtifactBindingError
 from ..old_model import OldModelRefusal, graph_loads
 from ..safetensors_header import SafetensorsFileIdentity
 from ..topology import Topology, topology_from_preset
-from . import consent_projection, loader_graph, loader_preflight, old_model_clear, render_validation
+from . import (
+    consent_projection,
+    expander_prompt,
+    loader_gate_defer,
+    loader_graph,
+    loader_preflight,
+    old_model_clear,
+    render_validation,
+)
 from .common import MeshSpec, ModelSpec
 from .loader_lora import has_live_lora_successor
 from .refusal_lead import lead_with_refusal
@@ -196,15 +204,18 @@ class DGXMonarchUNETLoader:
         # budget, so it answers before the comfy-managed policy card, the
         # footprint card, and ensure_live healing or spawning a fleet.
         loader_preflight.preflight_upstream_gated_artifact(unet_name)
+        # A prompt expander that cannot see the request renders a wrong picture
+        # on any budget, so it answers here too, before the price and any load.
+        expander_prompt.refuse_dead_expander(prompt)
         # This runs above the footprint card; preflight_graph_batch_divides_dp says why.
-        render_validation.preflight_graph_batch_divides_dp(mesh, prompt)
+        render_validation.preflight_graph_batch_divides_dp(mesh, prompt, unique_id)
         # Above the footprint card, which would otherwise offer slab residency
         # where slab is not a lever (see preflight_comfy_managed_topology).
         loader_preflight.preflight_comfy_managed_topology(mesh)
 
         def price_load():
             rescue = loader_preflight.preflight_loader_footprint(
-                mesh, unet_name, options, prompt)
+                mesh, unet_name, options, prompt, slot=self.SLOT)
             if rescue is None:
                 # Always project consent: worker capacity checks may offer rescue
                 # even when this family-scoped driver estimator made no claim.
@@ -255,22 +266,24 @@ class DGXMonarchUNETLoader:
             from .render_session import mutation_render_session
 
             def defers(handle, topo) -> bool:
-                # Setup stays eager. A dm-cfg2 slot loads once per owning rank
-                # at sampling; a LoRA successor completes the request there.
-                # Loading the empty base here would strip an already correct
-                # resident blend on each readiness-barrier invalidation.
-                # No call_all result exists to certify on either deferred path.
+                # Setup stays eager. The first render completes a deferred
+                # request without stripping an already correct LoRA blend or
+                # repeating a load that the first-use gate will discard.
                 render_preflight.preflight_sol_sequence_parallel(topo, mesh.attention)
-                dual_model = self._defers_for_dual_model_cfg2(mesh, unet_name, topo)
-                lora_graph = has_live_lora_successor(prompt, unique_id, unet_name)
-                if not (dual_model or lora_graph):
+                if self._defers_for_dual_model_cfg2(mesh, unet_name, topo):
+                    reason = "explicit cfg2 dm-cfg2"
+                elif has_live_lora_successor(prompt, unique_id, unet_name):
+                    reason = "live native LoRA stack"
+                elif rescue_load is None and loader_gate_defer.ceremony_drops_load(
+                        spec, handle, prompt, unique_id):
+                    reason = loader_gate_defer.REASON
+                else:
                     return False
                 with mutation_render_session(handle):
                     mesh_setup.ensure_request_setup(
                         handle, topo, mesh.attention, mesh.sync_ulysses,
                         mesh.worker_args)
-                first_render.load_deferred(self.ENDPOINT, reason=(
-                    "explicit cfg2 dm-cfg2" if dual_model else "live native LoRA stack"))
+                first_render.load_deferred(self.ENDPOINT, reason=reason)
                 return True
 
             if defers(handle, topo):
