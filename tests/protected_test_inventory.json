@@ -389,7 +389,7 @@
       "test_accept_clears_the_attached_mesh_and_saves_nothing": "34132ed9979a53bc",
       "test_accept_with_always_saves_the_toggle_too": "2b78b9ce9cde3adc",
       "test_after_a_clear_a_later_loader_refusal_binds_the_fresh_fleet": "d5b7585f19ac748d",
-      "test_always_clears_once_and_says_so": "ddbe182ff200adac",
+      "test_always_clears_once_and_says_so": "5b03083fd1505722",
       "test_always_never_clears_a_pinned_session_a_refusal_it_cannot_answer_or_a_busy_mesh": "8d2cc6e8a7ee97e5",
       "test_always_takes_the_reset_gate_and_its_drain_answers_the_cards": "114e49771a56a3f1",
       "test_every_reset_answers_the_open_cards": "c84130f0c04f40fd",
@@ -2603,7 +2603,7 @@
       "test_exact_request_still_reuses": "a59a19edc8351d49",
       "test_fsdp_tagged_quantized_key_refusal_still_falls_through_to_reload": "27764acdf079a8d7",
       "test_interrupted_lazy_swap_discards_old_request_before_reraise": "259193c4f245923c",
-      "test_interrupted_lazy_swap_preserves_primary_when_drop_fails": "0fc72f0deb3cbd6f",
+      "test_interrupted_lazy_swap_preserves_primary_when_drop_fails": "2640e41f83cf5569",
       "test_lazy_swap_cleanup_cancellation_outranks_ordinary_failure": "598d9893dbcd7319",
       "test_lazy_swap_double_failure_survives_all_broken_diagnostics": "47752b3278f85771",
       "test_lazy_swap_drop_interrupt_after_global_unload_retains_exact_owner": "e30d0efc22ddcdd2",
@@ -2623,7 +2623,7 @@
       "test_slab_lazy_swap_completes_before_publishing_stack": "bce41547db1df326",
       "test_stack_change_captures_only_novel_keys": "1323528153932ed0",
       "test_strength_change_reuses_record_no_capture": "f441facb3f5bfe24",
-      "test_unsupported_dtype_voids_unbake_record_but_bake_continues": "2d65c85b6c86e868"
+      "test_unsupported_dtype_voids_unbake_record_but_bake_continues": "a8dec40c4627e4fe"
     },
     "tests/test_store_slab_routing.py": {
       "test_a_fitting_slab_load_still_runs_through_both_walls": "bf23770ba0ca1978",

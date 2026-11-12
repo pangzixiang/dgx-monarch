@@ -236,7 +236,7 @@ def test_a_lora_the_held_stack_lacks_keeps_146s_price_and_card(quote):
             ) in str(raised.value)
 
 
-def test_a_lora_the_backup_does_not_cover_still_reloads(rig, monkeypatch):  # noqa: F811
+def test_a_lora_the_backup_does_not_cover_still_reloads(rig, monkeypatch):
     """#146's path: the store drops the copy and loads base and the new stack fresh."""
     store, _calls = rig
     store.lora_low_rss = False

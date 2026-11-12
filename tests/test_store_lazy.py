@@ -137,6 +137,7 @@ def _stored(lora_stack, quant="bf16", unbake="auto"):
 def test_unsupported_dtype_voids_unbake_record_but_bake_continues(monkeypatch, caplog):
     from dgx_monarch.actor import store_bake, unbake
 
+    monkeypatch.setattr(store_bake.log, "propagate", True)
     comfy = types.ModuleType("comfy")
     mm = types.ModuleType("comfy.model_management")
     loaded = []
@@ -435,6 +436,8 @@ def test_interrupted_lazy_swap_preserves_primary_when_drop_fails(
     rig, monkeypatch, caplog,
 ):
     """A failed discard poisons the slot and adds its evidence as a note; the swap abort stays the raised error."""
+
+    monkeypatch.setattr(ms.log, "propagate", True)
 
     class SwapAbort(BaseException):
         pass
