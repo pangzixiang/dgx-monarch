@@ -11,10 +11,9 @@ With no second model wired it is a plain CFG guider on one model.
 """
 from __future__ import annotations
 
-from ..cfg_pair import text_rows_differ
 from ..constants import GUIDER_TYPE, MODEL_TYPE, NODE_CATEGORY
 from .common import ModelSpec, conditioning_for_wire
-from .render_preflight import CFG_PAIR_DIFFERS_METADATA_KEY, krea2_ref_preflight_summary
+from .render_preflight import krea2_ref_preflight_summary
 
 
 class DGXMonarchBasicGuider:
@@ -65,8 +64,7 @@ class DGXMonarchCFGGuider:
         }
         ref_summary = krea2_ref_preflight_summary(positive, negative)
         return ({"model": model, "spec": spec, "cfg": float(cfg), "uncond_model": None,
-                 "_dgxm_krea2_ref_preflight": ref_summary,
-                 CFG_PAIR_DIFFERS_METADATA_KEY: text_rows_differ(positive, negative)},)
+                 "_dgxm_krea2_ref_preflight": ref_summary},)
 
 
 class DGXMonarchDualModelGuider:
@@ -108,8 +106,7 @@ class DGXMonarchDualModelGuider:
                 "cfg": float(cfg),
             }
             return ({"model": model, "spec": spec, "cfg": float(cfg), "uncond_model": None,
-                     "_dgxm_krea2_ref_preflight": ref_summary,
-                     CFG_PAIR_DIFFERS_METADATA_KEY: text_rows_differ(positive, negative)},)
+                     "_dgxm_krea2_ref_preflight": ref_summary},)
 
         spec = {
             "kind": "dual_model",

@@ -118,9 +118,7 @@ class SetupRequest:
             raise ValueError("invalid setup fabric profile")
         if self.start_workers and not self.install_service:
             raise ValueError("worker start requires a service installed by the same setup transaction")
-        # Normalize once: building, binding and validating a supplied plan must
-        # all count the same deduplicated paths.
-        object.__setattr__(self, "artifacts", validate_artifact_paths(self.artifacts))
+        validate_artifact_paths(self.artifacts)
 
     def binding(self) -> str:
         return request_binding(

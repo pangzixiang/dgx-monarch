@@ -48,7 +48,6 @@ from ..progress import ProgressReceiver
 from ..transfer import pack_latent
 from . import consent_waiver, model_patch_preflight, old_model_clear, refusal_lead, render_preflight, render_rows
 from .abandoned_heal import HealOutcome, heal_abandoned_wedge_once
-from .gate_dual import forced_stock_state
 from .gate_identity import (
     authorize_normal_render,
     model_for_request,
@@ -321,7 +320,6 @@ def _submit_render_guarded(
         render_preflight.preflight_krea2_reference_latents(model, ref_summary, topo)
         model_patch_preflight.preflight_moss_image_reference_images(model, ref_summary, topo)
         model_patch_preflight.preflight_moss_image_attention_bias(model, request, topo)
-        model_patch_preflight.preflight_flux_views(model, request, topo)
         render_preflight.preflight_minimax_h3_topology(model, topo)
         model_patch_preflight.preflight_model_patches(model, topo, request)
         model_patch_preflight.preflight_h3_sigma_shift(model, request, latent)
@@ -336,7 +334,6 @@ def _submit_render_guarded(
             handle,
             resolved_topology=topo,
             resolved_attention=sample_attention,
-            uncond=request.get("uncond_model"),
         ) or model
         authorization = authorize_normal_render(
             model, handle, uncond_model_request=request.get("uncond_model"),
@@ -346,11 +343,12 @@ def _submit_render_guarded(
             resolved_attention=sample_attention,
         )
         refusal_lead.note_if_slab_dropped(model.mesh.worker_args, authorization.worker_args,
-                                          state=forced_stock_state(request, topo))
+                                          dual=request.get("uncond_model") is not None)
 
-        # Under comfy-managed residency a dual-model request runs no ceremony
-        # (nodes/gate_dual.py), so a blocked ceremony is not what refuses it.
-        # The generic refusal, which names the second model, answers it.
+        # A dual-model request is stamped stock whatever any ceremony did,
+        # and auto_gate off does not change that, so a blocked ceremony is
+        # not what refuses it. The generic refusal, which names the second
+        # model, answers it.
         if request.get("uncond_model") is None:
             consent_waiver.assert_ceremony_not_blocked(
                 model, handle, authorization)
