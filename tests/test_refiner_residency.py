@@ -106,10 +106,10 @@ def test_snapshot_and_full_unload_include_refiner(monkeypatch):
     store.refiner = resident()
     dropped = []
     monkeypatch.setattr("dgx_monarch.actor.resident_ledger.pin_store_for_unload", lambda *items: None)
-    monkeypatch.setattr(store, "_drop", lambda slot, *, everything: dropped.append((slot, everything)))
+    monkeypatch.setattr(store, "_drop", dropped.append)
     monkeypatch.setattr(store, "release_retained_cleanup", lambda: None)
     store.unload_all()
-    assert dropped == [("refiner", True), ("uncond", True), ("cond", True)]
+    assert dropped == ["refiner", "uncond", "cond"]
 
 
 @pytest.mark.parametrize("topology", [{"cfg": 2}, {"ring": 2}, {"dp": 2}, {"fsdp": True}])

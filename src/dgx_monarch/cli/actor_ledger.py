@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import math
 import os
 import re
 import threading
@@ -75,44 +74,46 @@ def empty_ledger(boot: str = "") -> dict[str, Any]:
     }
 
 
-def ledger_int(value: Any) -> int | None:
-    """An int that is not a bool, a finite whole float, or decimal text; else None."""
-    if isinstance(value, float):
-        return int(value) if math.isfinite(value) and value.is_integer() else None
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return None
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def _ledger_float(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return number if math.isfinite(number) else None
-
-
 def _coerce_row(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
-    pid, starttime = ledger_int(raw.get("pid")), ledger_int(raw.get("starttime"))
-    if pid is None or starttime is None or pid <= 1:
+    try:
+        pid = int(raw["pid"])
+        starttime = int(raw["starttime"])
+    except (KeyError, TypeError, ValueError):
         return None
-    orphan = _ledger_float(raw.get("orphan_since"))
+    if pid <= 1:
+        return None
+    orphan_since = raw.get("orphan_since")
+    try:
+        orphan = None if orphan_since is None else float(orphan_since)
+    except (TypeError, ValueError):
+        orphan = None
     return {
         "pid": pid,
         "starttime": starttime,
         "address": str(raw.get("address", "")),
-        "loop_pid": ledger_int(raw.get("loop_pid")) or 0,
-        "loop_starttime": ledger_int(raw.get("loop_starttime")) or 0,
+        "loop_pid": _int_or_zero(raw.get("loop_pid")),
+        "loop_starttime": _int_or_zero(raw.get("loop_starttime")),
         "marker": str(raw.get("marker", "cmdline")),
-        "first_seen": _ledger_float(raw.get("first_seen")) or 0.0,
-        "last_seen": _ledger_float(raw.get("last_seen")) or 0.0,
+        "first_seen": _float_or_zero(raw.get("first_seen")),
+        "last_seen": _float_or_zero(raw.get("last_seen")),
         "orphan_since": orphan,
     }
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float_or_zero(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def read_ledger(
@@ -136,15 +137,12 @@ def read_ledger(
         # Start times repeat across boots and so do pids: a foreign-boot ledger
         # could name an unrelated process. Discard it whole.
         return empty_ledger(running_boot)
-    actors = raw.get("actors") or []
-    if not isinstance(actors, list):  # valid JSON in the wrong shape is corrupt
-        return empty_ledger(running_boot)
-    rows = [row for row in map(_coerce_row, actors) if row is not None]
+    rows = [row for row in map(_coerce_row, raw.get("actors") or []) if row is not None]
     loop = raw.get("loop") if isinstance(raw.get("loop"), dict) else None
     return {
         "version": LEDGER_VERSION,
         "boot_id": str(running_boot),
-        "written_at": _ledger_float(raw.get("written_at")) or 0.0,
+        "written_at": _float_or_zero(raw.get("written_at")),
         "loop": loop,
         "actors": rows,
     }
@@ -299,11 +297,7 @@ def loop_identity(
 
 def _children_index(proc_root: str) -> dict[int, list[int]]:
     index: dict[int, list[int]] = {}
-    try:  # an unlisted root adds no rows; the tracker never removes one on a listing
-        pids = proc_identity.iter_pids(proc_root)
-    except proc_identity.ProcListingError:
-        return index
-    for pid in pids:
+    for pid in proc_identity.iter_pids(proc_root):
         stat = proc_identity.read_stat(pid, proc_root)
         if stat is None:
             continue

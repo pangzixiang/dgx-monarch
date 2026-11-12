@@ -115,8 +115,8 @@ class ModelStore:
         self.current: StoredModel | None = None
         self.uncond: StoredModel | None = None  # dual-model CFG
         self.refiner: StoredModel | None = None  # independent video finishing model
-        # ComfyUI's global unload can evict peers on a quant hot-swap or a
-        # slab or shard drop. Eviction marks last for the store instance, keyed by
+        # comfy's unload_all_models() is global: dropping or quant-hot-swapping one
+        # slot evicts the other slot's GPU weights too. Instance lifetime, keyed by
         # slot name; a reload or reuse of that slot clears it, and the reuse log says so.
         self._gpu_evicted: set[str] = set()
         # A failed global unload can leave comfy's process-wide model state partly
@@ -402,7 +402,7 @@ class ModelStore:
 
     _invalidate_gpu_weights = staticmethod(store_bake.invalidate_gpu_weights)
 
-    def _drop(self, slot: str, everything: bool = False) -> None:
+    def _drop(self, slot: str) -> None:
         stored = self._stored(slot)
         if stored is None:
             self._drop_failed.discard(slot)
@@ -419,8 +419,7 @@ class ModelStore:
             fsdp_shard_build.drop_sharded_weights_in_place(
                 (stored.base_patcher, stored.active_patcher),
                 origin=f"model store [{slot}]")
-            peers = resident_slots.peers(self, slot)
-            alone = resident_ledger.unload_dropped(mm, stored, None, everything, peers=peers)
+            resident_ledger.unload_without_offload(mm, (stored.base_patcher, stored.active_patcher))
             self._drop_failed.add(slot)
             stored.base_patcher = stored.active_patcher = stored.unbake = None
             resident_ledger.collect_dropped()
@@ -448,7 +447,7 @@ class ModelStore:
         elif owner_kind:
             slab_lifetime.close_or_retain_after_explicit_unload(stored, "model-store resources")
         self._drop_failed.discard(slot)
-        resident_ledger.mark_after_drop(self, slot, alone)
+        self._mark_other_slot_evicted(slot)
         resident_ledger.flush_dropped(mm, slot)
 
     def cleanup_active(self) -> None:
@@ -462,9 +461,9 @@ class ModelStore:
     def unload_all(self) -> None:
         resident_ledger.pin_store_for_unload(*(held for _, held in resident_slots.items(self)))
         if self.refiner is not None:
-            self._drop("refiner", everything=True)
-        self._drop("uncond", everything=True)
-        self._drop("cond", everything=True)
+            self._drop("refiner")
+        self._drop("uncond")
+        self._drop("cond")
         self.release_retained_cleanup()
 
     def release_retained_cleanup(self) -> None:

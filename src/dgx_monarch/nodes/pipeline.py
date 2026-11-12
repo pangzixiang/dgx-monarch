@@ -306,10 +306,9 @@ class RenderPipeline:
         # Before the risk read, not after it: a quarantine another
         # combination's abort wrote reads as no risk here, so a combination
         # the ceremony never saw would lose its ceremony too.
-        common._restore_requested_levers(model, request.get("uncond_model"))
+        common._restore_requested_levers(model)
         if model is not None and common.auto_gate_required(
-                model, request.get("kind", ""), latent, cfg_value,
-                *(() if request.get("uncond_model") is None else (request["uncond_model"],))):
+                model, request.get("kind", ""), latent, cfg_value):
             while self._inflight:
                 self._collect_oldest()
             # The identity ceremony runs its own direct render. Yield this
@@ -319,7 +318,7 @@ class RenderPipeline:
             gate_result = common._maybe_auto_gate(
                 model, request, latent, cfg_value, steps_hint)
             if gate_result not in gate_inconclusive.NO_QUARANTINE_VERDICTS:
-                common._quarantine_unproven_paths(model, uncond=request.get("uncond_model"))
+                common._quarantine_unproven_paths(model)
         while len(self._inflight) >= self.depth:
             self._collect_oldest()
         seq = self._seq

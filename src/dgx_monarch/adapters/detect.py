@@ -15,7 +15,6 @@ from ..safetensors_header import (
     SafetensorsHeaderError,
     read_safetensors_header,
 )
-from . import minimax_h3_image_header as h3_image
 
 log = get_logger(__name__)
 # Every listed module-path segment must appear. `patchify_proj.` separates LTX
@@ -45,10 +44,9 @@ _SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("qwen_image", ("transformer_blocks.", "txt_norm.", "img_in.")),
     ("ltx", ("adaln_single.", "transformer_blocks.", "patchify_proj.")),
     ("kandinsky5", ("visual_transformer_blocks.", "text_transformer_blocks.")),
-    # H3's paths are unique (its refiner and blocks differ from Hunyuan, Omnigen2 and
-    # Ernie); a file without H3's audio path is MiniMax-H3-Image, as ComfyUI reads it.
+    # H3's two projection paths are unique; its refiner and block paths differ
+    # from Hunyuan, Omnigen2, and Ernie.
     ("minimax_h3", ("video_patch_proj.", "audio_patch_proj.")),
-    (h3_image.FAMILY, h3_image.SIGNATURE),
     ("ernie", ("adaLN_sa_ln.", "mlp.linear_fc2.")),
     # One architecture, two spellings: ComfyUI's CogVideoX flattens the time
     # embedding to `time_embedding_linear_1`, a diffusers export keeps
@@ -221,8 +219,8 @@ def detect_quant_from_header(keys: list[str], header: dict) -> str:
     """Return the checkpoint kind used by auto topology.
 
     Quantized markers win over full-precision dtypes. Any F16 tensor yields
-    `fp16` so the BF16-only FSDP gate cannot grant it, except MiniMax-H3-Image's
-    adaLN islands (`h3_image.f16_islands`); unmarked headers keep `bf16`.
+    `fp16` so the BF16-only FSDP gate cannot grant it; unmarked headers retain
+    the `bf16` compatibility default.
     """
     stripped = [_strip_prefix(k) for k in keys]
     if any(k == "scaled_fp8" or k.endswith(".scaled_fp8") for k in stripped):
@@ -236,18 +234,31 @@ def detect_quant_from_header(keys: list[str], header: dict) -> str:
         return "fp8"
     if "I8" in dtypes:
         return "int8"
-    if "F16" in dtypes and not h3_image.f16_islands(keys, tensors):
+    if "F16" in dtypes:
         return "fp16"
     return "bf16"
+
+
+def _bytes_by_dtype(header: dict) -> dict[str, int]:
+    """Total tensor bytes per safetensors dtype name, from a parsed header."""
+    tensors = header.get("__tensors__", {})
+    out: dict[str, int] = {}
+    for info in tensors.values():
+        if not isinstance(info, dict):
+            continue
+        offsets = info.get("data_offsets") or (0, 0)
+        size = int(offsets[1]) - int(offsets[0]) if len(offsets) == 2 else 0
+        name = str(info.get("dtype", ""))
+        out[name] = out.get(name, 0) + max(size, 0)
+    return out
 
 
 def sniff_fsdp_launch_quant_proof(path: str | Path) -> FsdpLaunchQuantProof:
     """Return strict on-disk precision bound to the parsed inode.
 
     A uniform BF16 descriptor set answers `bf16`, a uniform F16 set `fp16`,
-    and a BF16 core whose only other dtype is F32 inside the islands ceiling
-    (`fsdp_islands.header_core_kind`) still answers `bf16`; attention pins do
-    not count and a family's named islands count as F32 (`proof_bytes_by_dtype`). Every
+    and a BF16 core whose only other dtype is F32 inside the fp32-islands
+    ceiling (`fsdp_islands.header_core_kind`) still answers `bf16`. Every
     other format answers its own kind, and a file that cannot be read or whose
     identity changed under the parse answers `unknown` with no identity. FSDP
     refuses anything but the admitted kinds before materialization.
@@ -264,10 +275,9 @@ def sniff_fsdp_launch_quant_proof(path: str | Path) -> FsdpLaunchQuantProof:
     if generic_kind not in ("bf16", "fp16"):
         quant_kind = generic_kind
     else:
-        from .fsdp_islands import header_core_kind, proof_bytes_by_dtype
+        from .fsdp_islands import header_core_kind
 
-        tensors = header.get("__tensors__", {})
-        quant_kind = header_core_kind(proof_bytes_by_dtype(tensors, h3_image.f16_islands(keys, tensors)))
+        quant_kind = header_core_kind(_bytes_by_dtype(header))
 
     # Recheck the path after parsing to catch replacement or symlink retargeting
     # between descriptor validation and proof publication.
@@ -321,7 +331,7 @@ def fsdp_lora_admission_property(path: str | Path) -> str | None:
         return None
     stripped = [_strip_prefix(k) for k in keys]
     tensors = header.get("__tensors__", {})
-    dtypes = {str(info.get("dtype", "")) for info in tensors.values() if isinstance(info, dict)}
+    dtypes = set(_bytes_by_dtype(header))
     metadata_keys = {k for k in header if k != "__tensors__"}
     if (
         any(k == "scaled_fp8" or k.endswith(".scaled_fp8") for k in stripped)
@@ -465,7 +475,7 @@ def sniff_zimage_l2p(path: str | Path) -> bool:
         return _zimage_l2p_by_identity(
             str(resolved), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
     except Exception as exc:
-        log.debug("the strict L2P sniff could not read %s: %r", path, exc)
+        log.debug("upstream gate stood down for %s: %r", path, exc)
         return False
 
 
