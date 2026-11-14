@@ -41,7 +41,7 @@ def test_each_native_loader_can_defer_to_its_actual_lora_request(kind):
 
 
 @pytest.mark.parametrize("case", ["headless", "no-id", "wrong-id", "other-file", "unknown-loader",
-                                  "unknown-transform", "other-parent", "other-output", "unused"])
+                                  "unknown-transform", "other-parent", "other-output", "unused", "no-readiness-barrier"])
 def test_only_a_live_native_transform_of_this_loader_defers(case):
     prompt, node_id, name = graph(), "2", NAME
     if case == "headless":
@@ -62,6 +62,8 @@ def test_only_a_live_native_transform_of_this_loader_defers(case):
         prompt["6"]["inputs"]["model"] = ["2", 1]
     if case == "unused":
         prompt["out"]["inputs"]["source"] = ["2", 0]
+    if case == "no-readiness-barrier":
+        prompt["2"]["inputs"]["mesh"] = ["1", 0]
     assert not loader_lora.has_live_lora_successor(prompt, node_id, name)
 
 

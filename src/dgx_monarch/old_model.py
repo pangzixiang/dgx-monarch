@@ -1,9 +1,13 @@
 """The "Old model in the way" refusal: a model loaded earlier blocks this one.
 
-Cross-rank and driver-host prices take residents as held (DESIGN section 5.9).
-The exception is a slot's own stock resident replaced by a swap: the quote
-credits its drop, so a fleet clear is weighed against the uncredited price.
-``changes_in_place`` applies the same credit to a LoRA change on the held file.
+Both capacity prices that see a Worker's resident take it as still held
+(docs/DESIGN.md section 5.9): the cross-rank agreement's quote and the loader
+preflight on the driver host, where the head's actor shares the box. The one
+exception is the slot's own stock resident a swap replaces, which the store
+drops before the load and both prices credit (``swap_credit.py`` on the driver
+host); a clear is weighed against the uncredited price, as a cleared box holds no copy to drop. A LoRA change
+on the held file is the same credit (``changes_in_place``). A clear of
+the attached mesh, the same teardown as Reset attached mesh, returns all of it.
 This module decides whether a clear would make room and writes the plain
 sentences such a refusal carries, naming each box by ``box_names.py``'s rule
 ("the head", "the sibling"). ``nodes/old_model_clear.py`` owns the card, the

@@ -85,6 +85,15 @@ _KNOWN_NODE_TYPES = frozenset({
     "TextGenerateV2",
     "ComfySwitchNode",
     "PreviewAny",
+    # MiniMax-H3-Image: its conditioning node, the edit graph's resize node,
+    # and the two string nodes ComfyUI's expander chain adds to the one above.
+    "MiniMaxH3ImageConditioning",
+    "ResizeImageMaskNode",
+    "StringReplace",
+    "StringTrim",
+    "StringCompare",
+    "RegexExtract",
+    "RegexReplace",
     "TextEncodeMageFlowEdit",
     "TextEncodeQwenImage21",
     "QwenImage21Cache",
@@ -465,6 +474,9 @@ TEMPLATE_FOR_ROW: dict[str, str | None] = {
     "Kandinsky5-Video Lite": "dgx-monarch-kandinsky5-video-lite.json",
     "Kandinsky5-Video Pro": "dgx-monarch-kandinsky5-video-pro.json",
     "MiniMax H3 (t2va/fl2va/ref2va AV)": "dgx-monarch-minimax-h3-t2va.json",
+    # The row maps to the text-to-image graph; the edit graph ships beside it
+    # unmapped, as the FLUX.3 edit graphs do.
+    "MiniMax-H3-Image": "dgx-monarch-minimax-h3-image-t2i.json",
 }
 
 # Every row without a template must explicitly state that gap.
