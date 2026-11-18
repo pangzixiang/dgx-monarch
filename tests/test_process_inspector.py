@@ -15,7 +15,6 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -297,10 +296,10 @@ def test_cleanup_socket_does_not_remove_a_replaced_inode(tmp_path):
     path = tmp_path / "inspect.sock"
     first = socket.socket(socket.AF_UNIX)
     first.bind(str(path))
-    expected_info = path.stat()
-    expected = SimpleNamespace(st_dev=expected_info.st_dev, st_ino=expected_info.st_ino + 1)
+    expected = path.stat()
     first.close()
-    path.unlink()
+    # Keep the original inode allocated so the replacement is genuinely distinct.
+    path.rename(tmp_path / "original.sock")
     replacement = socket.socket(socket.AF_UNIX)
     replacement.bind(str(path))
     try:
